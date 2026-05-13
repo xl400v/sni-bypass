@@ -1,10 +1,10 @@
 {
   "name": "sni-bypass",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "description": "AI: Show the working code for checking the health of remote servers",
-  "main": "check-servers.js",
+  "main": "main.js",
   "scripts": {
-    "start": "node --trace-warnings --expose-gc ./check-servers.js",
+    "start": "node --trace-warnings --expose-gc ./main.js",
     "check": "command -v node",
     "test": "npm list --depth=0 && npm audit fix --force"
   },

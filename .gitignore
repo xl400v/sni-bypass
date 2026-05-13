@@ -1,0 +1,9 @@
+# Runtime data
+package-lock.json
+
+# Dependency directories
+node_modules/
+
+# DataBase files
+*.csv
+*.txt

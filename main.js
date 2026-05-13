@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 1.3.0
+ * Version: 1.3.1
  * Date: 13 May 2026
  * 
  * Главный скрипт проверки VPN-серверов с параллельным пингом
@@ -15,6 +15,7 @@ const csvParser = require('csv-parser');
 
 const PING_THRESHOLD = 3000;
 const CONCURRENCY = 4;
+const MAX_PING_TIME_SECONDS = 60;        // ← Новая переменная (таймаут выполнения пинга в секундах). -1 = без ограничения
 
 const SUBSCRIPTIONS_URL = 'https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/Vless-Reality-White-Lists-Rus-Mobile.txt';
 const DB_FILE = 'servers-db.csv';
@@ -43,25 +44,37 @@ async function tcpPing(host, port = 443, timeout = PING_THRESHOLD * 2) {
     });
 }
 
-/** Параллельный пинг с ограничением concurrency */
+/** Параллельный пинг с ограничением по времени */
 async function pingAll(subscriptions) {
     const startTime = performance.now();
     const results = [];
+    let isTimeoutReached = false;
+
     const queue = [...subscriptions];
 
     const workers = Array.from({ length: CONCURRENCY }, async () => {
-        while (queue.length > 0) {
+        while (queue.length > 0 && !isTimeoutReached) {
             const sub = queue.shift();
             if (!sub) break;
+
             const ping = await tcpPing(sub.host, sub.port);
             results.push({ ...sub, localPing: ping });
+
+            // Проверка таймаута выполнения всего пинга
+            if (MAX_PING_TIME_SECONDS > 0) {
+                const elapsed = (performance.now() - startTime) / 1000;
+                if (elapsed > MAX_PING_TIME_SECONDS) {
+                    isTimeoutReached = true;
+                    console.log(`⏰ Достигнут лимит времени пинга (${MAX_PING_TIME_SECONDS} сек). Прерываем оставшиеся проверки.`);
+                }
+            }
         }
     });
 
     await Promise.all(workers);
     const totalTime = (performance.now() - startTime).toFixed(0);
 
-    console.log(`⚡ Параллельный пинг завершён за ${totalTime} мс (${CONCURRENCY} потока)`);
+    console.log(`⚡ Параллельный пинг завершён за ${totalTime} мс (${CONCURRENCY} потоков)`);
     return { results, totalTime };
 }
 
@@ -70,22 +83,25 @@ function extractQuic(line) {
     return match ? match[0] : null;
 }
 
-/** Поиск страны по URL-encoded эмодзи */
+/** Обновлённая карта эмодзи (исправленная Россия + новые страны) */
 function getCountry(remark) {
     const emojiMap = {
-        '%F0%9F%87%AB%F0%9F%87%AE': 'FI',
-        '%F0%9F%87%A6%F0%9F%87%B9': 'AT',
-        '%F0%9F%87%AB%F0%9F%87%B7': 'FR',
-        '%F0%9F%87%A9%F0%9F%87%AA': 'DE',
-        '%F0%9F%87%B7%F0%9F%87%B4': 'RU',
-        '%F0%9F%87%BA%F0%9F%87%B8': 'US',
-        // добавляй другие по необходимости
+        '%F0%9F%87%AB%F0%9F%87%AE': 'FI',   // Finland
+        '%F0%9F%87%A6%F0%9F%87%B9': 'AT',   // Austria
+        '%F0%9F%87%AB%F0%9F%87%B7': 'FR',   // France
+        '%F0%9F%87%A9%F0%9F%87%AA': 'DE',   // Germany
+        '%F0%9F%87%B7%F0%9F%87%BA': 'RU',   // Russia (исправлено)
+        '%F0%9F%87%BA%F0%9F%87%B8': 'US',   // USA
+        '%F0%9F%87%B3%F0%9F%87%B1': 'NL',   // Netherlands
+        '%F0%9F%87%B1%F0%9F%87%BB': 'LV',   // Latvia
+        '%F0%9F%87%B5%F0%9F%87%B1': 'PL',   // Poland
+        '%F0%9F%87%B0%F0%9F%87%B7': 'KR'    // South Korea
     };
 
     for (const [encoded, code] of Object.entries(emojiMap)) {
         if (remark.includes(encoded)) return code;
     }
-    return 'XX';
+    return 'EU';   // Если страна не найдена — EU
 }
 
 function parseSubscription(line) {
@@ -113,13 +129,14 @@ function parseSubscription(line) {
         if (!protoType || sni.toLowerCase().includes('max.ru')) return null;
 
         const remark = line.split('#').pop() || '';
+        const encodedRemark = encodeURIComponent(remark);
 
         return {
             subscription: line.trim(),
             host,
             port,
             protocol: protoType,
-            country: getCountry(encodeURIComponent(remark)), // поиск по encoded эмодзи
+            country: getCountry(encodedRemark),
             cidr: remark.includes('CIDR') ? 1 : 0,
             tg: remark.toLowerCase().includes('tg') ? 1 : 0,
             yt: (remark.toLowerCase().includes('youtube') || remark.toLowerCase().includes('yt')) ? 1 : 0,
@@ -132,7 +149,7 @@ function parseSubscription(line) {
 
 // ====================== РАБОТА С БАЗОЙ ======================
 
-async function loadDatabase() {
+async function loadDatabase() { /* ... без изменений ... */ 
     if (!fs.existsSync(DB_FILE)) {
         const writer = createObjectCsvWriter({ path: DB_FILE, header: [
             { id: 'lastCheck', title: 'lastCheck' },
@@ -160,7 +177,6 @@ async function loadDatabase() {
 }
 
 async function saveDatabase(records) {
-    // Сортировка: сначала по дате (новые сверху), потом по рейтингу (высокий сверху)
     records.sort((a, b) => {
         if (a.lastCheck !== b.lastCheck) return b.lastCheck.localeCompare(a.lastCheck);
         return parseInt(b.rating) - parseInt(a.rating);
@@ -205,8 +221,8 @@ async function main() {
     let newCount = 0, updatedCount = 0, checkedCount = 0;
 
     const now = new Date();
-    const today = now.toISOString().split('T')[0];                    // YYYY-MM-DD
-    const timeForFooter = now.toISOString().slice(0, 16).replace('T', ' '); // yyyy-MM-DDThh:mm
+    const today = now.toISOString().split('T')[0];
+    const timeForFooter = now.toISOString().slice(0, 16).replace('T', ' ');
 
     for (const sub of pingResults) {
         if (!sub.quic) continue;
@@ -256,19 +272,18 @@ async function main() {
     console.log(`   Обновлено записей: ${updatedCount}`);
     console.log(`   Время параллельного пинга: ${totalTime} мс`);
 
-    // Формирование best-serv.txt в отдельном модуле
+    // Формирование best-serv.txt
     const { createBestServFile } = require('./create-best-serv.js');
     await createBestServFile(db, OUTPUT_FILE, today, timeForFooter);
 
-    // FTP загрузка
+    // FTP + удаление файла
     if (fs.existsSync(OUTPUT_FILE)) {
         console.log('📤 Загрузка на FTP...');
         const { uploadToFTP } = require('./ftp-upload.js');
         await uploadToFTP(OUTPUT_FILE, FTP_CONFIG);
 
-        // Удаляем файл после попытки передачи
         fs.unlinkSync(OUTPUT_FILE);
-        console.log(`🗑 Файл ${OUTPUT_FILE} удалён после передачи`);
+        console.log(`🗑 Файл ${OUTPUT_FILE} удалён`);
     }
 }
 

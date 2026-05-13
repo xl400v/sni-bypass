@@ -1,9 +1,9 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 1.1.0
+ * Version: 1.3.0
  * Date: 13 May 2026
  * 
- * Главный скрипт проверки VPN-серверов
+ * Главный скрипт проверки VPN-серверов с параллельным пингом
  */
 
 const fs = require('fs');
@@ -13,24 +13,22 @@ const fetch = require('node-fetch');
 const { createObjectCsvWriter } = require('csv-writer');
 const csvParser = require('csv-parser');
 
-// ====================== КОНФИГУРАЦИЯ ======================
-const SUBSCRIPTIONS_URL = 'https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/Vless-Reality-White-Lists-Rus-Mobile.txt';
+const PING_THRESHOLD = 3000;
+const CONCURRENCY = 4;
 
+const SUBSCRIPTIONS_URL = 'https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/Vless-Reality-White-Lists-Rus-Mobile.txt';
 const DB_FILE = 'servers-db.csv';
 const OUTPUT_FILE = 'best-serv.txt';
 
-const PING_THRESHOLD = 3000;
-
 const FTP_CONFIG = {
-    host: 'host',
+    host: 'name.org',
     port: 21,
-    user: 'user',
+    user: 'acc',
     password: 'pass'
 };
 
 // ====================== УТИЛИТЫ ======================
 
-/** TCP Ping */
 async function tcpPing(host, port = 443, timeout = PING_THRESHOLD * 2) {
     return new Promise((resolve) => {
         const start = performance.now();
@@ -40,22 +38,56 @@ async function tcpPing(host, port = 443, timeout = PING_THRESHOLD * 2) {
             resolve(latency);
         });
 
-        socket.setTimeout(timeout, () => {
-            socket.destroy();
-            resolve(-1);
-        });
-
+        socket.setTimeout(timeout, () => { socket.destroy(); resolve(-1); });
         socket.on('error', () => resolve(-1));
     });
 }
 
-/** Извлечение quic */
+/** Параллельный пинг с ограничением concurrency */
+async function pingAll(subscriptions) {
+    const startTime = performance.now();
+    const results = [];
+    const queue = [...subscriptions];
+
+    const workers = Array.from({ length: CONCURRENCY }, async () => {
+        while (queue.length > 0) {
+            const sub = queue.shift();
+            if (!sub) break;
+            const ping = await tcpPing(sub.host, sub.port);
+            results.push({ ...sub, localPing: ping });
+        }
+    });
+
+    await Promise.all(workers);
+    const totalTime = (performance.now() - startTime).toFixed(0);
+
+    console.log(`⚡ Параллельный пинг завершён за ${totalTime} мс (${CONCURRENCY} потока)`);
+    return { results, totalTime };
+}
+
 function extractQuic(line) {
     const match = line.match(/(?<=\/)[^\/@]+(?=@)/);
     return match ? match[0] : null;
 }
 
-/** Парсинг подписки */
+/** Поиск страны по URL-encoded эмодзи */
+function getCountry(remark) {
+    const emojiMap = {
+        '%F0%9F%87%AB%F0%9F%87%AE': 'FI',
+        '%F0%9F%87%A6%F0%9F%87%B9': 'AT',
+        '%F0%9F%87%AB%F0%9F%87%B7': 'FR',
+        '%F0%9F%87%A9%F0%9F%87%AA': 'DE',
+        '%F0%9F%87%B7%F0%9F%87%B4': 'RU',
+        '%F0%9F%87%BA%F0%9F%87%B8': 'US',
+        // добавляй другие по необходимости
+    };
+
+    for (const [encoded, code] of Object.entries(emojiMap)) {
+        if (remark.includes(encoded)) return code;
+    }
+    return 'XX';
+}
+
 function parseSubscription(line) {
     try {
         if (!line || line.startsWith('#')) return null;
@@ -66,33 +98,28 @@ function parseSubscription(line) {
         const protocolRaw = url.protocol.replace(':', '').toUpperCase();
         const host = url.hostname;
         const port = parseInt(url.port) || 443;
-
         const type = url.searchParams.get('type') || '';
         const security = url.searchParams.get('security') || '';
         const sni = url.searchParams.get('sni') || host;
 
         let protoType = '';
-
         if (protocolRaw === 'HYSTERIA2') {
             protoType = 'HYSTERIA2+TLS';
         } else if (protocolRaw === 'VLESS' && security === 'reality') {
-            if (type === 'tcp') protoType = 'VLESS+REALITY';
+            if (type === 'tcp') protoType = 'VLESS+TCP+REALITY';
             else if (type === 'xhttp') protoType = 'VLESS+XHTTP+REALITY';
         }
 
         if (!protoType || sni.toLowerCase().includes('max.ru')) return null;
 
         const remark = line.split('#').pop() || '';
-        const countryMatch = remark.match(/🇦🇹|🇫🇮|🇫🇷|🇩🇪|🇷🇺|🇺🇸/);
-        const countryMap = { '🇦🇹':'AT', '🇫🇮':'FI', '🇫🇷':'FR', '🇩🇪':'DE', '🇷🇺':'RU', '🇺🇸':'US' };
-        const country = countryMatch ? countryMap[countryMatch[0]] || 'XX' : 'XX';
 
         return {
             subscription: line.trim(),
             host,
             port,
             protocol: protoType,
-            country,
+            country: getCountry(encodeURIComponent(remark)), // поиск по encoded эмодзи
             cidr: remark.includes('CIDR') ? 1 : 0,
             tg: remark.toLowerCase().includes('tg') ? 1 : 0,
             yt: (remark.toLowerCase().includes('youtube') || remark.toLowerCase().includes('yt')) ? 1 : 0,
@@ -107,21 +134,17 @@ function parseSubscription(line) {
 
 async function loadDatabase() {
     if (!fs.existsSync(DB_FILE)) {
-        console.log('📁 Создаём новую базу данных...');
-        const writer = createObjectCsvWriter({
-            path: DB_FILE,
-            header: [
-                { id: 'lastCheck', title: 'lastCheck' },
-                { id: 'rating', title: 'rating' },
-                { id: 'protocol', title: 'protocol' },
-                { id: 'country', title: 'country' },
-                { id: 'cidr', title: 'cidr' },
-                { id: 'tg', title: 'tg' },
-                { id: 'yt', title: 'yt' },
-                { id: 'quic', title: 'quic' },
-                { id: 'subscription', title: 'subscription' }
-            ]
-        });
+        const writer = createObjectCsvWriter({ path: DB_FILE, header: [
+            { id: 'lastCheck', title: 'lastCheck' },
+            { id: 'rating', title: 'rating' },
+            { id: 'protocol', title: 'protocol' },
+            { id: 'country', title: 'country' },
+            { id: 'cidr', title: 'cidr' },
+            { id: 'tg', title: 'tg' },
+            { id: 'yt', title: 'yt' },
+            { id: 'quic', title: 'quic' },
+            { id: 'subscription', title: 'subscription' }
+        ]});
         await writer.writeRecords([]);
         return [];
     }
@@ -137,20 +160,23 @@ async function loadDatabase() {
 }
 
 async function saveDatabase(records) {
-    const writer = createObjectCsvWriter({
-        path: DB_FILE,
-        header: [
-            { id: 'lastCheck', title: 'lastCheck' },
-            { id: 'rating', title: 'rating' },
-            { id: 'protocol', title: 'protocol' },
-            { id: 'country', title: 'country' },
-            { id: 'cidr', title: 'cidr' },
-            { id: 'tg', title: 'tg' },
-            { id: 'yt', title: 'yt' },
-            { id: 'quic', title: 'quic' },
-            { id: 'subscription', title: 'subscription' }
-        ]
+    // Сортировка: сначала по дате (новые сверху), потом по рейтингу (высокий сверху)
+    records.sort((a, b) => {
+        if (a.lastCheck !== b.lastCheck) return b.lastCheck.localeCompare(a.lastCheck);
+        return parseInt(b.rating) - parseInt(a.rating);
     });
+
+    const writer = createObjectCsvWriter({ path: DB_FILE, header: [
+        { id: 'lastCheck', title: 'lastCheck' },
+        { id: 'rating', title: 'rating' },
+        { id: 'protocol', title: 'protocol' },
+        { id: 'country', title: 'country' },
+        { id: 'cidr', title: 'cidr' },
+        { id: 'tg', title: 'tg' },
+        { id: 'yt', title: 'yt' },
+        { id: 'quic', title: 'quic' },
+        { id: 'subscription', title: 'subscription' }
+    ]});
     await writer.writeRecords(records);
 }
 
@@ -162,40 +188,33 @@ async function main() {
     let text;
     try {
         const res = await fetch(SUBSCRIPTIONS_URL);
-        if (!res.ok) throw new Error();
         text = await res.text();
     } catch {
         console.error('❌ Нет доступа к файлу подписок.');
         process.exit(1);
     }
 
-    const lines = text.split('\n');
-    const subscriptions = lines.map(parseSubscription).filter(Boolean);
-
+    const subscriptions = text.split('\n').map(parseSubscription).filter(Boolean);
     console.log(`✅ Отфильтровано серверов: ${subscriptions.length}`);
+
+    const { results: pingResults, totalTime } = await pingAll(subscriptions);
 
     let db = await loadDatabase();
     const dbMap = new Map(db.map(r => [r.quic, r]));
 
-    let newCount = 0;
-    let updatedCount = 0;
-    let checkedCount = 0;
+    let newCount = 0, updatedCount = 0, checkedCount = 0;
 
     const now = new Date();
-    const day = String(now.getDate()).padStart(2, '0');
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const hours = String(now.getHours()).padStart(2, '0');
-    const minutes = String(now.getMinutes()).padStart(2, '0');
-    const currentDateStr = `${day}/${month} ${hours}:${minutes}`;
-    const today = new Date().toISOString().split('T')[0];
-    for (const sub of subscriptions) {
+    const today = now.toISOString().split('T')[0];                    // YYYY-MM-DD
+    const timeForFooter = now.toISOString().slice(0, 16).replace('T', ' '); // yyyy-MM-DDThh:mm
+
+    for (const sub of pingResults) {
         if (!sub.quic) continue;
         checkedCount++;
 
-        const localPing = await tcpPing(sub.host, sub.port, PING_THRESHOLD * 2);
+        const localPing = sub.localPing;
 
         if (!dbMap.has(sub.quic)) {
-            // Новая запись
             if (localPing > 0 && localPing < PING_THRESHOLD * 3) {
                 dbMap.set(sub.quic, {
                     lastCheck: today,
@@ -213,20 +232,18 @@ async function main() {
             continue;
         }
 
-        // Обновление существующей записи
         const record = dbMap.get(sub.quic);
 
         if (localPing > 0) {
-            record.lastCheck = today;        // обновляем дату только при успешном пинге
+            record.lastCheck = today;
         }
 
-        if (localPing === -1 || localPing > PING_THRESHOLD) {
+        if (localPing === -1) {
+            record.rating = String(Math.max(0, parseInt(record.rating) - 2));
+            updatedCount++;
+        } else if (localPing > PING_THRESHOLD) {
             record.rating = String(Math.max(0, parseInt(record.rating) - 1));
             updatedCount++;
-        }
-
-        if (parseInt(record.rating) < 0) {
-            dbMap.delete(sub.quic);
         }
     }
 
@@ -234,36 +251,25 @@ async function main() {
     await saveDatabase(db);
 
     console.log(`\n📊 Итоги проверки:`);
-    console.log(`   Проверено: ${checkedCount}`);
-    console.log(`   Новых: ${newCount}`);
-    console.log(`   Обновлено: ${updatedCount}`);
+    console.log(`   Проверено серверов: ${checkedCount}`);
+    console.log(`   Новых записей: ${newCount}`);
+    console.log(`   Обновлено записей: ${updatedCount}`);
+    console.log(`   Время параллельного пинга: ${totalTime} мс`);
 
-    // ====================== Формирование best-serv.txt ======================
-    const best = db
-        .sort((a, b) => parseInt(b.rating) - parseInt(a.rating) || 
-                       new Date(b.lastCheck.split(' ')[0].split('/').reverse().join('-') + ' ' + b.lastCheck.split(' ')[1]) - 
-                       new Date(a.lastCheck.split(' ')[0].split('/').reverse().join('-') + ' ' + a.lastCheck.split(' ')[1]))
-        .slice(0, 4);
+    // Формирование best-serv.txt в отдельном модуле
+    const { createBestServFile } = require('./create-best-serv.js');
+    await createBestServFile(db, OUTPUT_FILE, today, timeForFooter);
 
-    const header = `#profile-title: 🧢 TPL Free ${currentDateStr}\n` +
-                   `#profile-update-interval: 1\n` +
-                   `#support-url: https://t.me/+cnBIozEwEzpkYzQy\n` +
-                   `#hide-settings: 0\n\n`;
-
-    let outputContent = header;
-    best.forEach(rec => outputContent += rec.subscription + '\n');
-
-    fs.writeFileSync(OUTPUT_FILE, outputContent.trim());
-    console.log(`\n📄 Файл ${OUTPUT_FILE} успешно создан (${best.length} подписок)`);
-
-    // ====================== Запуск FTP загрузки ======================
-    if (best.length > 0) {
-        console.log('📤 Запуск загрузки на FTP...');
+    // FTP загрузка
+    if (fs.existsSync(OUTPUT_FILE)) {
+        console.log('📤 Загрузка на FTP...');
         const { uploadToFTP } = require('./ftp-upload.js');
         await uploadToFTP(OUTPUT_FILE, FTP_CONFIG);
-    } else {
-        console.log('⚠️ Нет серверов для загрузки на FTP.');
+
+        // Удаляем файл после попытки передачи
+        fs.unlinkSync(OUTPUT_FILE);
+        console.log(`🗑 Файл ${OUTPUT_FILE} удалён после передачи`);
     }
 }
 
-main().catch(err => console.error('💥 Ошибка:', err));
+main().catch(err => console.error('💥 Критическая ошибка:', err));

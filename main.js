@@ -1,9 +1,9 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 1.3.1
+ * Version: 1.3.2
  * Date: 13 May 2026
  * 
- * Главный скрипт проверки VPN-серверов с параллельным пингом
+ * Главный скрипт проверки VPN-серверов с улучшенным определением страны
  */
 
 const fs = require('fs');
@@ -15,7 +15,7 @@ const csvParser = require('csv-parser');
 
 const PING_THRESHOLD = 3000;
 const CONCURRENCY = 4;
-const MAX_PING_TIME_SECONDS = 60;        // ← Новая переменная (таймаут выполнения пинга в секундах). -1 = без ограничения
+const MAX_PING_TIME_SECONDS = 10;        // ← Изменено на 10 секунд
 
 const SUBSCRIPTIONS_URL = 'https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/Vless-Reality-White-Lists-Rus-Mobile.txt';
 const DB_FILE = 'servers-db.csv';
@@ -44,12 +44,10 @@ async function tcpPing(host, port = 443, timeout = PING_THRESHOLD * 2) {
     });
 }
 
-/** Параллельный пинг с ограничением по времени */
 async function pingAll(subscriptions) {
     const startTime = performance.now();
     const results = [];
     let isTimeoutReached = false;
-
     const queue = [...subscriptions];
 
     const workers = Array.from({ length: CONCURRENCY }, async () => {
@@ -60,12 +58,11 @@ async function pingAll(subscriptions) {
             const ping = await tcpPing(sub.host, sub.port);
             results.push({ ...sub, localPing: ping });
 
-            // Проверка таймаута выполнения всего пинга
             if (MAX_PING_TIME_SECONDS > 0) {
                 const elapsed = (performance.now() - startTime) / 1000;
                 if (elapsed > MAX_PING_TIME_SECONDS) {
                     isTimeoutReached = true;
-                    console.log(`⏰ Достигнут лимит времени пинга (${MAX_PING_TIME_SECONDS} сек). Прерываем оставшиеся проверки.`);
+                    console.log(`⏰ Лимит времени пинга (${MAX_PING_TIME_SECONDS} сек) достигнут. Прерываем оставшиеся проверки.`);
                 }
             }
         }
@@ -83,25 +80,33 @@ function extractQuic(line) {
     return match ? match[0] : null;
 }
 
-/** Обновлённая карта эмодзи (исправленная Россия + новые страны) */
+/** Улучшенное определение страны через RegExp + точные encoded флаги */
 function getCountry(remark) {
-    const emojiMap = {
-        '%F0%9F%87%AB%F0%9F%87%AE': 'FI',   // Finland
-        '%F0%9F%87%A6%F0%9F%87%B9': 'AT',   // Austria
-        '%F0%9F%87%AB%F0%9F%87%B7': 'FR',   // France
+    const flagMap = {
         '%F0%9F%87%A9%F0%9F%87%AA': 'DE',   // Germany
         '%F0%9F%87%B7%F0%9F%87%BA': 'RU',   // Russia (исправлено)
-        '%F0%9F%87%BA%F0%9F%87%B8': 'US',   // USA
+        '%F0%9F%87%B1%F0%9F%87%B9': 'LT',   // Lithuania
         '%F0%9F%87%B3%F0%9F%87%B1': 'NL',   // Netherlands
-        '%F0%9F%87%B1%F0%9F%87%BB': 'LV',   // Latvia
         '%F0%9F%87%B5%F0%9F%87%B1': 'PL',   // Poland
-        '%F0%9F%87%B0%F0%9F%87%B7': 'KR'    // South Korea
+        '%F0%9F%87%B1%F0%9F%87%BB': 'LV',   // Latvia
+        '%F0%9F%87%B0%F0%9F%87%B7': 'KR',   // South Korea
     };
 
-    for (const [encoded, code] of Object.entries(emojiMap)) {
+    // 1. Проверка по точному encoded флагу
+    for (const [encoded, code] of Object.entries(flagMap)) {
         if (remark.includes(encoded)) return code;
     }
-    return 'EU';   // Если страна не найдена — EU
+
+    // 2. Регулярные выражения как запасной вариант
+    if (/🇩🇪|Germany/i.test(remark)) return 'DE';
+    if (/🇷🇺|Russia/i.test(remark)) return 'RU';
+    if (/🇱🇹|Lithuania/i.test(remark)) return 'LT';
+    if (/🇳🇱|Netherlands|The Netherlands/i.test(remark)) return 'NL';
+    if (/🇵🇱|Poland/i.test(remark)) return 'PL';
+    if (/🇱🇻|Latvia/i.test(remark)) return 'LV';
+    if (/🇰🇷|Korea/i.test(remark)) return 'KR';
+
+    return 'EU';   // Если ничего не найдено
 }
 
 function parseSubscription(line) {
@@ -129,7 +134,7 @@ function parseSubscription(line) {
         if (!protoType || sni.toLowerCase().includes('max.ru')) return null;
 
         const remark = line.split('#').pop() || '';
-        const encodedRemark = encodeURIComponent(remark);
+        const encodedRemark = encodeURIComponent(remark);   // для поиска encoded флагов
 
         return {
             subscription: line.trim(),
@@ -149,19 +154,22 @@ function parseSubscription(line) {
 
 // ====================== РАБОТА С БАЗОЙ ======================
 
-async function loadDatabase() { /* ... без изменений ... */ 
+async function loadDatabase() {
     if (!fs.existsSync(DB_FILE)) {
-        const writer = createObjectCsvWriter({ path: DB_FILE, header: [
-            { id: 'lastCheck', title: 'lastCheck' },
-            { id: 'rating', title: 'rating' },
-            { id: 'protocol', title: 'protocol' },
-            { id: 'country', title: 'country' },
-            { id: 'cidr', title: 'cidr' },
-            { id: 'tg', title: 'tg' },
-            { id: 'yt', title: 'yt' },
-            { id: 'quic', title: 'quic' },
-            { id: 'subscription', title: 'subscription' }
-        ]});
+        const writer = createObjectCsvWriter({
+            path: DB_FILE,
+            header: [
+                { id: 'lastCheck', title: 'lastCheck' },
+                { id: 'rating', title: 'rating' },
+                { id: 'protocol', title: 'protocol' },
+                { id: 'country', title: 'country' },
+                { id: 'cidr', title: 'cidr' },
+                { id: 'tg', title: 'tg' },
+                { id: 'yt', title: 'yt' },
+                { id: 'quic', title: 'quic' },
+                { id: 'subscription', title: 'subscription' }
+            ]
+        });
         await writer.writeRecords([]);
         return [];
     }
@@ -182,17 +190,20 @@ async function saveDatabase(records) {
         return parseInt(b.rating) - parseInt(a.rating);
     });
 
-    const writer = createObjectCsvWriter({ path: DB_FILE, header: [
-        { id: 'lastCheck', title: 'lastCheck' },
-        { id: 'rating', title: 'rating' },
-        { id: 'protocol', title: 'protocol' },
-        { id: 'country', title: 'country' },
-        { id: 'cidr', title: 'cidr' },
-        { id: 'tg', title: 'tg' },
-        { id: 'yt', title: 'yt' },
-        { id: 'quic', title: 'quic' },
-        { id: 'subscription', title: 'subscription' }
-    ]});
+    const writer = createObjectCsvWriter({
+        path: DB_FILE,
+        header: [
+            { id: 'lastCheck', title: 'lastCheck' },
+            { id: 'rating', title: 'rating' },
+            { id: 'protocol', title: 'protocol' },
+            { id: 'country', title: 'country' },
+            { id: 'cidr', title: 'cidr' },
+            { id: 'tg', title: 'tg' },
+            { id: 'yt', title: 'yt' },
+            { id: 'quic', title: 'quic' },
+            { id: 'subscription', title: 'subscription' }
+        ]
+    });
     await writer.writeRecords(records);
 }
 
@@ -250,9 +261,7 @@ async function main() {
 
         const record = dbMap.get(sub.quic);
 
-        if (localPing > 0) {
-            record.lastCheck = today;
-        }
+        if (localPing > 0) record.lastCheck = today;
 
         if (localPing === -1) {
             record.rating = String(Math.max(0, parseInt(record.rating) - 2));
@@ -272,11 +281,9 @@ async function main() {
     console.log(`   Обновлено записей: ${updatedCount}`);
     console.log(`   Время параллельного пинга: ${totalTime} мс`);
 
-    // Формирование best-serv.txt
     const { createBestServFile } = require('./create-best-serv.js');
     await createBestServFile(db, OUTPUT_FILE, today, timeForFooter);
 
-    // FTP + удаление файла
     if (fs.existsSync(OUTPUT_FILE)) {
         console.log('📤 Загрузка на FTP...');
         const { uploadToFTP } = require('./ftp-upload.js');

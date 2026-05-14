@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 1.4.3
+ * Version: 1.4.5
  * Date: 14 May 2026
  */
 
@@ -128,24 +128,24 @@ function parseSubscription(line) {
 
         return {
             subscription: line.trim(),
-            host,
+            host,           // оставляем для внутреннего использования
             port,
             protocol: protoType,
             country: getCountry(remark),
             cidr: remark.includes('CIDR') ? 1 : 0,
             tg: 0,
             yt: 0,
-            quic: extractQuic(line),
-            hostPort: `${host}:${port}`
+            quic: extractQuic(line)
+            // hostPort удалён по твоему требованию
         };
     } catch (e) {
         return null;
     }
 }
 
-// ====================== РАБОТА С БАЗОЙ ======================
+// ====================== БАЗА ДАННЫХ ======================
 
-async function loadDatabase() {
+async function loadDatabase() { /* ... без изменений */ 
     if (!fs.existsSync(DB_FILE)) {
         const writer = createObjectCsvWriter({
             path: DB_FILE,
@@ -271,7 +271,6 @@ async function main() {
     console.log(`   Обновлено: ${updatedCount}`);
     console.log(`   Время пинга: ${totalTime} мс`);
 
-    // Формирование best-serv.txt
     const { createBestServFile } = require('./create-best-serv.js');
     await createBestServFile(db, OUTPUT_FILE, today, timeForFooter);
 

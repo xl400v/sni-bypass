@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 1.4.1
+ * Version: 1.4.2
  * Date: 14 May 2026
  */
 
@@ -101,8 +101,8 @@ function getCountry(remark) {
         '%F0%9F%87%B0%F0%9F%87%B7': 'KR',
         '%F0%9F%87%AB%F0%9F%87%AE': 'FI',
         '%F0%9F%87%AB%F0%9F%87%B7': 'FR',
-        '%F0%9F%87%B0%F0%9F%87%B8': 'KZ',   // Казахстан
-        '%F0%9F%87%B9%F0%9F%87%AD': 'TH'    // Таиланд
+        '%F0%9F%87%B0%F0%9F%87%BF': 'KZ',
+        '%F0%9F%87%B9%F0%9F%87%AD': 'TH'
     };
 
     for (const [encodedFlag, code] of Object.entries(flagMap)) {

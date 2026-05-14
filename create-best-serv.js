@@ -1,7 +1,9 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 1.4.1
+ * Version: 1.4.2
  * Date: 14 May 2026
+ * 
+ * Модуль формирования best-serv.txt с приоритетом России и дедупликацией по host:port
  */
 
 const fs = require('fs');
@@ -12,48 +14,54 @@ const header = `#profile-title: 🧢 Free Rnd Serv\n` +
                `#hide-settings: 0\n\n`;
 
 async function createBestServFile(db, outputFile, today, timeForFooter) {
+    // Сортируем всю базу по рейтингу (высокий рейтинг сначала)
     const sorted = [...db].sort((a, b) => parseInt(b.rating) - parseInt(a.rating));
 
     const unique = [];
-    const seen = new Set();
+    const seenHostPort = new Set();
 
     for (const record of sorted) {
-        const keyQuic = `quic:${record.quic}`;
-        const keyHostPort = `hostport:${record.hostPort}`;
+        const hostPortKey = `hostport:${record.host}:${record.port}`;
 
-        if (seen.has(keyQuic) || seen.has(keyHostPort)) {
+        // Дедупликация только по host:port
+        if (seenHostPort.has(hostPortKey)) {
             continue;
         }
 
-        seen.add(keyQuic);
-        seen.add(keyHostPort);
+        seenHostPort.add(hostPortKey);
         unique.push(record);
     }
 
-    // Разделяем на группы
-    const ruServers = unique.filter(r => r.country === 'RU' && !r.hasLowPriority);
-    const normalServers = unique.filter(r => r.country !== 'RU' && !r.hasLowPriority);
-    const lowPriorityServers = unique.filter(r => r.hasLowPriority);
+    // === Формирование финального списка топ-4 ===
 
-    // Формируем финальный список топ-4
+    // 1. Лучшая запись России (если есть)
+    const ruServer = unique.find(r => r.country === 'RU');
+
+    // 2. Все остальные записи (кроме России)
+    const otherServers = unique.filter(r => r.country !== 'RU');
+
     let best = [];
 
-    // Максимум 1 сервер из России
-    if (ruServers.length > 0) {
-        best.push(ruServers[0]);
+    if (ruServer) {
+        best.push(ruServer);
     }
 
-    // Добавляем обычные серверы
-    best = best.concat(normalServers);
+    // Добавляем остальные страны, пока не наберём 4
+    for (const server of otherServers) {
+        if (best.length >= 4) break;
+        best.push(server);
+    }
 
-    // Если ещё не набрали 4 — добавляем низкоприоритетные
+    // Если всё ещё меньше 4 — добираем из оставшихся (включая низкоприоритетные)
     if (best.length < 4) {
-        best = best.concat(lowPriorityServers);
+        const remaining = unique.filter(r => !best.some(b => b.host === r.host && b.port === r.port));
+        best = best.concat(remaining.slice(0, 4 - best.length));
     }
 
-    // Оставляем только 4
+    // Ограничиваем ровно 4 записями
     best = best.slice(0, 4);
 
+    // Формируем содержимое файла
     let content = header;
 
     best.forEach(record => {
@@ -64,7 +72,8 @@ async function createBestServFile(db, outputFile, today, timeForFooter) {
     content += `vless://1.1.1.1:443?type=tcp#Checked%20${today}T${timeForFooter.split(' ')[1]}%20%F0%9F%AA%83\n`;
 
     fs.writeFileSync(outputFile, content.trim());
-    console.log(`📄 best-serv.txt создан (${best.length} серверов | 1 RU + остальные)`);
+    
+    console.log(`📄 best-serv.txt создан (${best.length} серверов | RU: ${ruServer ? '1' : '0'})`);
 }
 
 module.exports = { createBestServFile };

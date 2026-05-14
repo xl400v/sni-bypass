@@ -1,9 +1,9 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 1.3.2
+ * Version: 1.3.3
  * Date: 13 May 2026
  * 
- * Главный скрипт проверки VPN-серверов с улучшенным определением страны
+ * Главный скрипт проверки VPN-серверов
  */
 
 const fs = require('fs');
@@ -15,7 +15,7 @@ const csvParser = require('csv-parser');
 
 const PING_THRESHOLD = 3000;
 const CONCURRENCY = 4;
-const MAX_PING_TIME_SECONDS = 10;        // ← Изменено на 10 секунд
+const MAX_PING_TIME_SECONDS = 10;
 
 const SUBSCRIPTIONS_URL = 'https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/Vless-Reality-White-Lists-Rus-Mobile.txt';
 const DB_FILE = 'servers-db.csv';
@@ -62,7 +62,7 @@ async function pingAll(subscriptions) {
                 const elapsed = (performance.now() - startTime) / 1000;
                 if (elapsed > MAX_PING_TIME_SECONDS) {
                     isTimeoutReached = true;
-                    console.log(`⏰ Лимит времени пинга (${MAX_PING_TIME_SECONDS} сек) достигнут. Прерываем оставшиеся проверки.`);
+                    console.log(`⏰ Лимит времени пинга (${MAX_PING_TIME_SECONDS} сек) достигнут.`);
                 }
             }
         }
@@ -70,8 +70,7 @@ async function pingAll(subscriptions) {
 
     await Promise.all(workers);
     const totalTime = (performance.now() - startTime).toFixed(0);
-
-    console.log(`⚡ Параллельный пинг завершён за ${totalTime} мс (${CONCURRENCY} потоков)`);
+    console.log(`⚡ Параллельный пинг завершён за ${totalTime} мс`);
     return { results, totalTime };
 }
 
@@ -80,33 +79,52 @@ function extractQuic(line) {
     return match ? match[0] : null;
 }
 
-/** Улучшенное определение страны через RegExp + точные encoded флаги */
+/** === НОВАЯ УЛУЧШЕННАЯ ФУНКЦИЯ ОПРЕДЕЛЕНИЯ СТРАНЫ === */
 function getCountry(remark) {
+    if (!remark) return 'EU';
+
+    // Точная карта encoded флагов (самый надёжный способ)
     const flagMap = {
         '%F0%9F%87%A9%F0%9F%87%AA': 'DE',   // Germany
-        '%F0%9F%87%B7%F0%9F%87%BA': 'RU',   // Russia (исправлено)
+        '%F0%9F%87%B7%F0%9F%87%BA': 'RU',   // Russia
         '%F0%9F%87%B1%F0%9F%87%B9': 'LT',   // Lithuania
         '%F0%9F%87%B3%F0%9F%87%B1': 'NL',   // Netherlands
         '%F0%9F%87%B5%F0%9F%87%B1': 'PL',   // Poland
         '%F0%9F%87%B1%F0%9F%87%BB': 'LV',   // Latvia
         '%F0%9F%87%B0%F0%9F%87%B7': 'KR',   // South Korea
+        '%F0%9F%87%AB%F0%9F%87%AE': 'FI',   // Finland
+        '%F0%9F%87%AB%F0%9F%87%B7': 'FR',   // France
     };
 
-    // 1. Проверка по точному encoded флагу
-    for (const [encoded, code] of Object.entries(flagMap)) {
-        if (remark.includes(encoded)) return code;
+    // 1. Поиск по encoded флагу (самый точный метод)
+    for (const [encodedFlag, countryCode] of Object.entries(flagMap)) {
+        if (remark.includes(encodedFlag)) {
+            return countryCode;
+        }
     }
 
-    // 2. Регулярные выражения как запасной вариант
-    if (/🇩🇪|Germany/i.test(remark)) return 'DE';
-    if (/🇷🇺|Russia/i.test(remark)) return 'RU';
-    if (/🇱🇹|Lithuania/i.test(remark)) return 'LT';
-    if (/🇳🇱|Netherlands|The Netherlands/i.test(remark)) return 'NL';
-    if (/🇵🇱|Poland/i.test(remark)) return 'PL';
-    if (/🇱🇻|Latvia/i.test(remark)) return 'LV';
-    if (/🇰🇷|Korea/i.test(remark)) return 'KR';
+    // 2. Запасной вариант — поиск по текстовому названию страны
+    const lowerRemark = remark.toLowerCase();
+    if (lowerRemark.includes('russia') || lowerRemark.includes('russian')) return 'RU';
+    if (lowerRemark.includes('germany')) return 'DE';
+    if (lowerRemark.includes('lithuania')) return 'LT';
+    if (lowerRemark.includes('netherlands') || lowerRemark.includes('the netherlands')) return 'NL';
+    if (lowerRemark.includes('poland')) return 'PL';
+    if (lowerRemark.includes('latvia')) return 'LV';
+    if (lowerRemark.includes('korea')) return 'KR';
+    if (lowerRemark.includes('finland')) return 'FI';
+    if (lowerRemark.includes('france')) return 'FR';
 
-    return 'EU';   // Если ничего не найдено
+    // 3. Поиск по юникодным флагам (если вдруг попадутся)
+    if (/🇷🇺/.test(remark)) return 'RU';
+    if (/🇩🇪/.test(remark)) return 'DE';
+    if (/🇱🇹/.test(remark)) return 'LT';
+    if (/🇳🇱/.test(remark)) return 'NL';
+    if (/🇵🇱/.test(remark)) return 'PL';
+    if (/🇱🇻/.test(remark)) return 'LV';
+    if (/🇰🇷/.test(remark)) return 'KR';
+
+    return 'EU';
 }
 
 function parseSubscription(line) {
@@ -134,17 +152,16 @@ function parseSubscription(line) {
         if (!protoType || sni.toLowerCase().includes('max.ru')) return null;
 
         const remark = line.split('#').pop() || '';
-        const encodedRemark = encodeURIComponent(remark);   // для поиска encoded флагов
 
         return {
             subscription: line.trim(),
             host,
             port,
             protocol: protoType,
-            country: getCountry(encodedRemark),
+            country: getCountry(remark),           // ← передаём оригинальную remark
             cidr: remark.includes('CIDR') ? 1 : 0,
             tg: remark.toLowerCase().includes('tg') ? 1 : 0,
-            yt: (remark.toLowerCase().includes('youtube') || remark.toLowerCase().includes('yt')) ? 1 : 0,
+            yt: /youtube|yt/i.test(remark) ? 1 : 0,
             quic: extractQuic(line)
         };
     } catch (e) {
@@ -153,6 +170,7 @@ function parseSubscription(line) {
 }
 
 // ====================== РАБОТА С БАЗОЙ ======================
+// (loadDatabase и saveDatabase оставлены без изменений из предыдущей версии)
 
 async function loadDatabase() {
     if (!fs.existsSync(DB_FILE)) {
@@ -276,10 +294,10 @@ async function main() {
     await saveDatabase(db);
 
     console.log(`\n📊 Итоги проверки:`);
-    console.log(`   Проверено серверов: ${checkedCount}`);
-    console.log(`   Новых записей: ${newCount}`);
-    console.log(`   Обновлено записей: ${updatedCount}`);
-    console.log(`   Время параллельного пинга: ${totalTime} мс`);
+    console.log(`   Проверено: ${checkedCount}`);
+    console.log(`   Новых: ${newCount}`);
+    console.log(`   Обновлено: ${updatedCount}`);
+    console.log(`   Время пинга: ${totalTime} мс`);
 
     const { createBestServFile } = require('./create-best-serv.js');
     await createBestServFile(db, OUTPUT_FILE, today, timeForFooter);
@@ -294,4 +312,4 @@ async function main() {
     }
 }
 
-main().catch(err => console.error('💥 Критическая ошибка:', err));
+main().catch(err => console.error('💥 Ошибка:', err));

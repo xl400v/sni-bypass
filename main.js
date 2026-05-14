@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 1.4.5
+ * Version: 2.0.0
  * Date: 14 May 2026
  */
 
@@ -90,8 +90,8 @@ function getCountry(remark) {
         '%F0%9F%87%B0%F0%9F%87%B7': 'KR',
         '%F0%9F%87%AB%F0%9F%87%AE': 'FI',
         '%F0%9F%87%AB%F0%9F%87%B7': 'FR',
-        '%F0%9F%87%B0%F0%9F%87%BF': 'KZ',   // Казахстан
-        '%F0%9F%87%B9%F0%9F%87%AD': 'TH'    // Таиланд
+        '%F0%9F%87%B0%F0%9F%87%BF': 'KZ',
+        '%F0%9F%87%B9%F0%9F%87%AD': 'TH'
     };
 
     for (const [encodedFlag, code] of Object.entries(flagMap)) {
@@ -128,7 +128,7 @@ function parseSubscription(line) {
 
         return {
             subscription: line.trim(),
-            host,           // оставляем для внутреннего использования
+            host,
             port,
             protocol: protoType,
             country: getCountry(remark),
@@ -136,16 +136,15 @@ function parseSubscription(line) {
             tg: 0,
             yt: 0,
             quic: extractQuic(line)
-            // hostPort удалён по твоему требованию
         };
     } catch (e) {
         return null;
     }
 }
 
-// ====================== БАЗА ДАННЫХ ======================
+// ====================== РАБОТА С БАЗОЙ ======================
 
-async function loadDatabase() { /* ... без изменений */ 
+async function loadDatabase() {
     if (!fs.existsSync(DB_FILE)) {
         const writer = createObjectCsvWriter({
             path: DB_FILE,

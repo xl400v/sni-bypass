@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 1.4.2
+ * Version: 1.4.3
  * Date: 14 May 2026
  */
 
@@ -77,17 +77,6 @@ function extractQuic(line) {
     return match ? match[0] : null;
 }
 
-function extractHostPort(line) {
-    try {
-        const urlPart = line.split('#')[0];
-        const url = new URL(urlPart);
-        return `${url.hostname}:${url.port || 443}`;
-    } catch {
-        return null;
-    }
-}
-
-/** Определение страны — только по encoded флагам */
 function getCountry(remark) {
     if (!remark) return 'EU';
 
@@ -101,8 +90,8 @@ function getCountry(remark) {
         '%F0%9F%87%B0%F0%9F%87%B7': 'KR',
         '%F0%9F%87%AB%F0%9F%87%AE': 'FI',
         '%F0%9F%87%AB%F0%9F%87%B7': 'FR',
-        '%F0%9F%87%B0%F0%9F%87%BF': 'KZ',
-        '%F0%9F%87%B9%F0%9F%87%AD': 'TH'
+        '%F0%9F%87%B0%F0%9F%87%BF': 'KZ',   // Казахстан
+        '%F0%9F%87%B9%F0%9F%87%AD': 'TH'    // Таиланд
     };
 
     for (const [encodedFlag, code] of Object.entries(flagMap)) {
@@ -147,15 +136,14 @@ function parseSubscription(line) {
             tg: 0,
             yt: 0,
             quic: extractQuic(line),
-            hostPort: `${host}:${port}`,
-            hasLowPriority: /\b(vpn|xhttp)\b/i.test(remark)   // флаг низкого приоритета
+            hostPort: `${host}:${port}`
         };
     } catch (e) {
         return null;
     }
 }
 
-// ====================== БАЗА ======================
+// ====================== РАБОТА С БАЗОЙ ======================
 
 async function loadDatabase() {
     if (!fs.existsSync(DB_FILE)) {
@@ -210,7 +198,7 @@ async function saveDatabase(records) {
     await writer.writeRecords(records);
 }
 
-// ====================== MAIN ======================
+// ====================== ОСНОВНАЯ ЛОГИКА ======================
 
 async function main() {
     console.log('🚀 Запуск проверки серверов...\n');
@@ -224,7 +212,7 @@ async function main() {
         process.exit(1);
     }
 
-    let subscriptions = text.split('\n').map(parseSubscription).filter(Boolean);
+    const subscriptions = text.split('\n').map(parseSubscription).filter(Boolean);
     console.log(`✅ Отфильтровано серверов: ${subscriptions.length}`);
 
     const { results: pingResults, totalTime } = await pingAll(subscriptions);
@@ -283,6 +271,7 @@ async function main() {
     console.log(`   Обновлено: ${updatedCount}`);
     console.log(`   Время пинга: ${totalTime} мс`);
 
+    // Формирование best-serv.txt
     const { createBestServFile } = require('./create-best-serv.js');
     await createBestServFile(db, OUTPUT_FILE, today, timeForFooter);
 

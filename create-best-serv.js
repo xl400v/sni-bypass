@@ -1,7 +1,9 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 1.4.3
+ * Version: 1.4.4
  * Date: 14 May 2026
+ * 
+ * Модуль формирования best-serv.txt с системой приоритетов
  */
 
 const fs = require('fs');
@@ -13,18 +15,18 @@ const header = `#profile-title: 🧢 Free Rnd Serv\n` +
 
 async function createBestServFile(db, outputFile, today, timeForFooter) {
     if (!db || db.length === 0) {
-        console.log('⚠️ База данных пуста.');
+        console.log('⚠️ База данных пуста. Файл best-serv.txt не создан.');
         return;
     }
 
-    // Создаём временную коллекцию с полем priority
+    // 1. Создаём временную коллекцию с полем priority
     let tempList = db.map(record => ({
         ...record,
         priority: 3,                         // по умолчанию
         hostPort: `${record.host}:${record.port}`
     }));
 
-    // Присваиваем приоритеты
+    // 2. Присваиваем приоритеты
     let ruFound = false;
 
     for (const record of tempList) {
@@ -33,10 +35,10 @@ async function createBestServFile(db, outputFile, today, timeForFooter) {
 
         if (record.country === 'RU') {
             if (!ruFound) {
-                record.priority = 1;
+                record.priority = 1;   // первая Россия — высший приоритет
                 ruFound = true;
             } else {
-                record.priority = 4;
+                record.priority = 4;   // остальные Россия
             }
         } 
         else if (record.country !== 'EU') {
@@ -47,38 +49,44 @@ async function createBestServFile(db, outputFile, today, timeForFooter) {
         }
     }
 
-    // Дедупликация по host:port
+    // 3. Дедупликация по host:port
     const seen = new Set();
     const finalList = [];
 
     for (const record of tempList) {
         if (seen.has(record.hostPort)) {
-            record.priority = 5;   // дубликаты получают низкий приоритет
+            record.priority = 5;        // дубликаты получают низкий приоритет
             continue;
         }
         seen.add(record.hostPort);
         finalList.push(record);
     }
 
-    // Сортируем по возрастанию приоритета (1 — лучший)
+    // 4. Сортируем по возрастанию приоритета (1 — самый лучший)
     finalList.sort((a, b) => a.priority - b.priority);
 
-    // Берём первые 4 записи
-    const best = finalList.slice(0, 4);
+    // 5. Берём первые 4 записи (проходим по отсортированному списку)
+    const best = [];
+    for (const record of finalList) {
+        if (best.length >= 4) break;
+        best.push(record);
+    }
 
-    // Формируем файл
+    // 6. Формируем содержимое файла
     let content = header;
 
+    // Добавляем выбранные подписки
     best.forEach(record => {
         content += record.subscription + '\n';
     });
 
+    // В конце файла — специальная строка
     content += `vless://1.1.1.1:443?type=tcp#Checked%20${today}T${timeForFooter.split(' ')[1]}%20%F0%9F%AA%83\n`;
 
     fs.writeFileSync(outputFile, content.trim());
 
     console.log(`📄 best-serv.txt создан (${best.length} серверов)`);
-    console.log(`   Приоритеты выбранных серверов: ${best.map(r => r.priority).join(', ')}`);
+    console.log(`   Приоритеты: ${best.map(r => r.priority).join(', ')}`);
 }
 
 module.exports = { createBestServFile };

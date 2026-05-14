@@ -1,10 +1,13 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.0
+ * Version: 2.0.1
  * Date: 14 May 2026
  */
 
 const fs = require('fs');
+//const config = require('./config');
+
+//const { OUTPUT_FILE } = config;   // можно использовать, если захотим
 
 const header = `#profile-title: 🧢 Free Rnd Serv\n` +
                `#profile-update-interval: 4\n` +
@@ -86,7 +89,7 @@ async function createBestServFile(db, outputFile, today, timeForFooter) {
 
     fs.writeFileSync(outputFile, content.trim());
 
-    console.log(`📄 best-serv.txt успешно создан (${best.length} серверов)`);
+    console.log(`📄 ${outputFile} успешно создан (${best.length} серверов)`);
 }
 
 module.exports = { createBestServFile };

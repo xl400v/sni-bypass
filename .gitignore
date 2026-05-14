@@ -1,5 +1,6 @@
 # Runtime data
 package-lock.json
+config.js
 
 # Dependency directories
 node_modules/

@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.0
+ * Version: 2.0.1
  * Date: 14 May 2026
  */
 
@@ -10,21 +10,17 @@ const { performance } = require('perf_hooks');
 const fetch = require('node-fetch');
 const { createObjectCsvWriter } = require('csv-writer');
 const csvParser = require('csv-parser');
+const config = require('./config');
 
-const PING_THRESHOLD = 3000;
-const CONCURRENCY = 4;
-const MAX_PING_TIME_SECONDS = 30;
-
-const SUBSCRIPTIONS_URL = 'https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/Vless-Reality-White-Lists-Rus-Mobile.txt';
-const DB_FILE = 'servers-db.csv';
-const OUTPUT_FILE = 'best-serv.txt';
-
-const FTP_CONFIG = {
-    host: 'name.org',
-    port: 21,
-    user: 'acc',
-    password: 'pass'
-};
+const { 
+    SUBSCRIPTIONS_URL, 
+    DB_FILE, 
+    OUTPUT_FILE, 
+    PING_THRESHOLD, 
+    CONCURRENCY, 
+    MAX_PING_TIME_SECONDS,
+    FTP_CONFIG 
+} = config;
 
 // ====================== УТИЛИТЫ ======================
 
@@ -60,7 +56,6 @@ async function pingAll(subscriptions) {
                 const elapsed = (performance.now() - startTime) / 1000;
                 if (elapsed > MAX_PING_TIME_SECONDS) {
                     isTimeoutReached = true;
-                    console.log(`⏰ Лимит времени пинга (${MAX_PING_TIME_SECONDS} сек) достигнут.`);
                 }
             }
         }

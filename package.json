@@ -1,11 +1,12 @@
 {
   "name": "sni-bypass",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "AI: Show the working code for checking the health of remote servers",
   "main": "main.js",
   "scripts": {
     "start": "node --trace-warnings --expose-gc ./main.js",
-    "check": "node --trace-warnings --expose-gc ./check-tg-yt.js",
+    "check": "node ./check-tg-yt.js",
+    "xray:install": "node ./download-xray.js",
     "test": "npm list --depth=0 && npm audit fix --force"
   },
   "repository": {

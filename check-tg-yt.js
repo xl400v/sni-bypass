@@ -1,29 +1,33 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.0
+ * Version: 2.0.1
  * Date: 14 May 2026
  * 
- * Проверка доступности t.me и youtube.com через реальные VPN-подключения
- * Использует Xray-core (VLESS Reality + Hysteria2)
+ * Проверка доступности t.me и youtube.com через реальные VPN-подключения с использованием Xray-core
  */
 
 const fs = require('fs');
-const { execSync, spawn } = require('child_process');
+const { spawn } = require('child_process');
 const { createObjectCsvWriter } = require('csv-writer');
 const csvParser = require('csv-parser');
+const config = require('./config');
 
-const DB_FILE = 'servers-db.csv';
-const XRAY_PATH = 'xray';                    // должен быть в PATH или указать полный путь
-const TEMP_CONFIG = 'temp-xray-config.json';
-const TEST_TIMEOUT = 8000;                   // 8 секунд на тест
+const { 
+    DB_FILE, 
+    XRAY_PATH, 
+    TEMP_CONFIG_PATH, 
+    TEST_TIMEOUT_MS, 
+    CHECK_DELAY_MS 
+} = config;
 
 // ====================== УТИЛИТЫ ======================
 
 async function loadDatabase() {
     if (!fs.existsSync(DB_FILE)) {
-        console.log('❌ База данных не найдена.');
+        console.log('❌ Файл базы данных не найден.');
         return [];
     }
+
     return new Promise((resolve, reject) => {
         const records = [];
         fs.createReadStream(DB_FILE)
@@ -50,58 +54,127 @@ async function saveDatabase(records) {
         ]
     });
     await writer.writeRecords(records);
-    console.log(`✅ База обновлена (${records.length} записей)`);
+    console.log(`✅ База данных успешно обновлена (${records.length} записей)`);
 }
 
-/** Создаёт временный конфиг Xray для одной подписки */
-function createXrayConfig(subscription, testUrl) {
-    // Пока упрощённая версия — можно расширять
+/**
+ * Парсит vless-подписку и возвращает объект с параметрами
+ */
+function parseVlessSubscription(subscription) {
+    try {
+        const urlPart = subscription.split('#')[0];
+        const url = new URL(urlPart);
+
+        return {
+            uuid: url.username,
+            host: url.hostname,
+            port: parseInt(url.port) || 443,
+            type: url.searchParams.get('type') || 'tcp',
+            security: url.searchParams.get('security') || 'reality',
+            sni: url.searchParams.get('sni') || url.hostname,
+            pbk: url.searchParams.get('pbk'),
+            fp: url.searchParams.get('fp') || 'chrome',
+            flow: url.searchParams.get('flow') || '',
+            path: url.searchParams.get('path') || '/',
+            sid: url.searchParams.get('sid') || ''
+        };
+    } catch (e) {
+        console.error('❌ Ошибка парсинга subscription:', e.message);
+        return null;
+    }
+}
+
+/**
+ * Создаёт временный конфиг Xray
+ */
+function createXrayConfig(parsed) {
     return {
-        "log": { "loglevel": "none" },
-        "inbounds": [{
-            "port": 1080,
-            "protocol": "socks",
-            "settings": { "udp": true }
+        log: { loglevel: "none" },
+        inbounds: [{
+            port: 1080,
+            protocol: "socks",
+            settings: { udp: true },
+            listen: "127.0.0.1"
         }],
-        "outbounds": [{
-            "protocol": "vless",
-            "settings": {
-                "vnext": [{
-                    "address": "",           // будет заполнено из subscription
-                    "port": 443,
-                    "users": [{ "id": "", "encryption": "none", "flow": "" }]
+        outbounds: [{
+            protocol: "vless",
+            settings: {
+                vnext: [{
+                    address: parsed.host,
+                    port: parsed.port,
+                    users: [{
+                        id: parsed.uuid,
+                        encryption: "none",
+                        flow: parsed.flow
+                    }]
                 }]
             },
-            "streamSettings": {
-                "network": "tcp",
-                "security": "reality",
-                "realitySettings": {
-                    "serverName": "",
-                    "fingerprint": "chrome"
+            streamSettings: {
+                network: parsed.type,
+                security: parsed.security,
+                realitySettings: {
+                    serverName: parsed.sni,
+                    fingerprint: parsed.fp,
+                    shortId: parsed.sid,
+                    publicKey: parsed.pbk || ""
                 }
             }
         }]
     };
-    // Полная реализация парсинга subscription будет в следующей итерации
 }
 
-/** Проверка сайта через прокси */
-async function checkSiteThroughProxy(site) {
-    try {
-        const result = execSync(`curl -I -s --socks5 127.0.0.1:1080 --max-time 6 ${site}`, { 
-            encoding: 'utf8',
-            timeout: TEST_TIMEOUT 
-        });
-        return result.includes('200') || result.includes('HTTP') ? 1 : 0;
-    } catch (err) {
+/**
+ * Проверяет доступность сайта через Xray
+ */
+async function checkSiteThroughXray(subscription, site) {
+    const parsed = parseVlessSubscription(subscription);
+    if (!parsed) {
+        console.log(`   ⚠️ Не удалось распарсить подписку`);
         return 0;
     }
+
+    // Создаём конфиг
+    const xrayConfig = createXrayConfig(parsed);
+    fs.writeFileSync(TEMP_CONFIG_PATH, JSON.stringify(xrayConfig, null, 2));
+
+    return new Promise((resolve) => {
+        console.log(`   → Запуск Xray для проверки ${site}...`);
+
+        const xrayProcess = spawn(XRAY_PATH, ['run', '-c', TEMP_CONFIG_PATH], {
+            stdio: ['ignore', 'ignore', 'pipe']
+        });
+
+        const timeout = setTimeout(() => {
+            xrayProcess.kill();
+            resolve(0);
+        }, TEST_TIMEOUT_MS);
+
+        // Проверка через curl
+        setTimeout(async () => {
+            try {
+                const { execSync } = require('child_process');
+                const output = execSync(
+                    `curl -I -s --socks5 127.0.0.1:1080 --max-time 5 https://${site}`,
+                    { timeout: 6000 }
+                ).toString();
+
+                const success = output.includes('HTTP/') || output.includes('200');
+                clearTimeout(timeout);
+                xrayProcess.kill();
+                resolve(success ? 1 : 0);
+            } catch (err) {
+                clearTimeout(timeout);
+                xrayProcess.kill();
+                resolve(0);
+            }
+        }, 1800); // даём Xray время на запуск
+    });
 }
 
 // ====================== ГЛАВНАЯ ФУНКЦИЯ ======================
 
 async function checkTGandYT() {
-    console.log('🚀 Запуск проверки t.me и youtube.com через VPN...\n');
+    console.log('🚀 Запуск проверки t.me и youtube.com через Xray-core...\n');
 
     let db = await loadDatabase();
     if (db.length === 0) return;
@@ -110,29 +183,33 @@ async function checkTGandYT() {
 
     for (let i = 0; i < db.length; i++) {
         const record = db[i];
-        console.log(`[${i+1}/${db.length}] Проверка → ${record.country} | ${record.protocol}`);
+        console.log(`[${i+1}/${db.length}] Проверка → ${record.country.padEnd(4)} | ${record.protocol}`);
 
-        // Здесь будет запуск Xray с конфигом из subscription
-        // Пока используем заглушку с небольшой вероятностью успеха
-        const tgStatus = Math.random() > 0.25 ? 1 : 0;
-        const ytStatus = Math.random() > 0.30 ? 1 : 0;
+        const tgResult = await checkSiteThroughXray(record.subscription, 't.me');
+        const ytResult = await checkSiteThroughXray(record.subscription, 'youtube.com');
 
-        record.tg = String(tgStatus);
-        record.yt = String(ytStatus);
+        record.tg = String(tgResult);
+        record.yt = String(ytResult);
 
         updatedCount++;
 
-        // Задержка между проверками
-        await new Promise(r => setTimeout(r, 600));
+        await new Promise(r => setTimeout(r, CHECK_DELAY_MS));
     }
 
     await saveDatabase(db);
-    console.log(`\n✅ Проверка завершена! Обновлено записей: ${updatedCount}`);
+
+    // Очистка временного конфига
+    if (fs.existsSync(TEMP_CONFIG_PATH)) {
+        fs.unlinkSync(TEMP_CONFIG_PATH);
+    }
+
+    console.log(`\n✅ Проверка TG и YT завершена! Обновлено записей: ${updatedCount}`);
 }
 
-// Запуск
+// ====================== ЗАПУСК ======================
+
 checkTGandYT().catch(err => {
-    console.error('💥 Ошибка при проверке TG/YT:', err);
+    console.error('💥 Критическая ошибка:', err);
 });
 
 module.exports = { checkTGandYT };

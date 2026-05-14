@@ -1,9 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 1.3.3
+ * Version: 1.4.0
  * Date: 13 May 2026
- * 
- * Главный скрипт проверки VPN-серверов
  */
 
 const fs = require('fs');
@@ -15,7 +13,7 @@ const csvParser = require('csv-parser');
 
 const PING_THRESHOLD = 3000;
 const CONCURRENCY = 4;
-const MAX_PING_TIME_SECONDS = 10;
+const MAX_PING_TIME_SECONDS = 30;   // ← Изменено на 30 секунд
 
 const SUBSCRIPTIONS_URL = 'https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/Vless-Reality-White-Lists-Rus-Mobile.txt';
 const DB_FILE = 'servers-db.csv';
@@ -79,51 +77,35 @@ function extractQuic(line) {
     return match ? match[0] : null;
 }
 
-/** === НОВАЯ УЛУЧШЕННАЯ ФУНКЦИЯ ОПРЕДЕЛЕНИЯ СТРАНЫ === */
+function extractHostPort(line) {
+    try {
+        const urlPart = line.split('#')[0];
+        const url = new URL(urlPart);
+        return `${url.hostname}:${url.port || 443}`;
+    } catch {
+        return null;
+    }
+}
+
+/** Только encoded флаги (по требованию) */
 function getCountry(remark) {
     if (!remark) return 'EU';
 
-    // Точная карта encoded флагов (самый надёжный способ)
     const flagMap = {
-        '%F0%9F%87%A9%F0%9F%87%AA': 'DE',   // Germany
-        '%F0%9F%87%B7%F0%9F%87%BA': 'RU',   // Russia
-        '%F0%9F%87%B1%F0%9F%87%B9': 'LT',   // Lithuania
-        '%F0%9F%87%B3%F0%9F%87%B1': 'NL',   // Netherlands
-        '%F0%9F%87%B5%F0%9F%87%B1': 'PL',   // Poland
-        '%F0%9F%87%B1%F0%9F%87%BB': 'LV',   // Latvia
-        '%F0%9F%87%B0%F0%9F%87%B7': 'KR',   // South Korea
-        '%F0%9F%87%AB%F0%9F%87%AE': 'FI',   // Finland
-        '%F0%9F%87%AB%F0%9F%87%B7': 'FR',   // France
+        '%F0%9F%87%A9%F0%9F%87%AA': 'DE',
+        '%F0%9F%87%B7%F0%9F%87%BA': 'RU',
+        '%F0%9F%87%B1%F0%9F%87%B9': 'LT',
+        '%F0%9F%87%B3%F0%9F%87%B1': 'NL',
+        '%F0%9F%87%B5%F0%9F%87%B1': 'PL',
+        '%F0%9F%87%B1%F0%9F%87%BB': 'LV',
+        '%F0%9F%87%B0%F0%9F%87%B7': 'KR',
+        '%F0%9F%87%AB%F0%9F%87%AE': 'FI',
+        '%F0%9F%87%AB%F0%9F%87%B7': 'FR',
     };
 
-    // 1. Поиск по encoded флагу (самый точный метод)
-    for (const [encodedFlag, countryCode] of Object.entries(flagMap)) {
-        if (remark.includes(encodedFlag)) {
-            return countryCode;
-        }
+    for (const [encodedFlag, code] of Object.entries(flagMap)) {
+        if (remark.includes(encodedFlag)) return code;
     }
-
-    // 2. Запасной вариант — поиск по текстовому названию страны
-    const lowerRemark = remark.toLowerCase();
-    if (lowerRemark.includes('russia') || lowerRemark.includes('russian')) return 'RU';
-    if (lowerRemark.includes('germany')) return 'DE';
-    if (lowerRemark.includes('lithuania')) return 'LT';
-    if (lowerRemark.includes('netherlands') || lowerRemark.includes('the netherlands')) return 'NL';
-    if (lowerRemark.includes('poland')) return 'PL';
-    if (lowerRemark.includes('latvia')) return 'LV';
-    if (lowerRemark.includes('korea')) return 'KR';
-    if (lowerRemark.includes('finland')) return 'FI';
-    if (lowerRemark.includes('france')) return 'FR';
-
-    // 3. Поиск по юникодным флагам (если вдруг попадутся)
-    if (/🇷🇺/.test(remark)) return 'RU';
-    if (/🇩🇪/.test(remark)) return 'DE';
-    if (/🇱🇹/.test(remark)) return 'LT';
-    if (/🇳🇱/.test(remark)) return 'NL';
-    if (/🇵🇱/.test(remark)) return 'PL';
-    if (/🇱🇻/.test(remark)) return 'LV';
-    if (/🇰🇷/.test(remark)) return 'KR';
-
     return 'EU';
 }
 
@@ -158,36 +140,33 @@ function parseSubscription(line) {
             host,
             port,
             protocol: protoType,
-            country: getCountry(remark),           // ← передаём оригинальную remark
+            country: getCountry(remark),
             cidr: remark.includes('CIDR') ? 1 : 0,
-            tg: remark.toLowerCase().includes('tg') ? 1 : 0,
-            yt: /youtube|yt/i.test(remark) ? 1 : 0,
-            quic: extractQuic(line)
+            tg: 0,        // будет заполняться в отдельном скрипте
+            yt: 0,        // будет заполняться в отдельном скрипте
+            quic: extractQuic(line),
+            hostPort: `${host}:${port}`
         };
     } catch (e) {
         return null;
     }
 }
 
-// ====================== РАБОТА С БАЗОЙ ======================
-// (loadDatabase и saveDatabase оставлены без изменений из предыдущей версии)
+// ====================== БАЗА ДАННЫХ ======================
 
-async function loadDatabase() {
+async function loadDatabase() { /* ... без изменений ... */ 
     if (!fs.existsSync(DB_FILE)) {
-        const writer = createObjectCsvWriter({
-            path: DB_FILE,
-            header: [
-                { id: 'lastCheck', title: 'lastCheck' },
-                { id: 'rating', title: 'rating' },
-                { id: 'protocol', title: 'protocol' },
-                { id: 'country', title: 'country' },
-                { id: 'cidr', title: 'cidr' },
-                { id: 'tg', title: 'tg' },
-                { id: 'yt', title: 'yt' },
-                { id: 'quic', title: 'quic' },
-                { id: 'subscription', title: 'subscription' }
-            ]
-        });
+        const writer = createObjectCsvWriter({ path: DB_FILE, header: [
+            { id: 'lastCheck', title: 'lastCheck' },
+            { id: 'rating', title: 'rating' },
+            { id: 'protocol', title: 'protocol' },
+            { id: 'country', title: 'country' },
+            { id: 'cidr', title: 'cidr' },
+            { id: 'tg', title: 'tg' },
+            { id: 'yt', title: 'yt' },
+            { id: 'quic', title: 'quic' },
+            { id: 'subscription', title: 'subscription' }
+        ]});
         await writer.writeRecords([]);
         return [];
     }
@@ -208,20 +187,17 @@ async function saveDatabase(records) {
         return parseInt(b.rating) - parseInt(a.rating);
     });
 
-    const writer = createObjectCsvWriter({
-        path: DB_FILE,
-        header: [
-            { id: 'lastCheck', title: 'lastCheck' },
-            { id: 'rating', title: 'rating' },
-            { id: 'protocol', title: 'protocol' },
-            { id: 'country', title: 'country' },
-            { id: 'cidr', title: 'cidr' },
-            { id: 'tg', title: 'tg' },
-            { id: 'yt', title: 'yt' },
-            { id: 'quic', title: 'quic' },
-            { id: 'subscription', title: 'subscription' }
-        ]
-    });
+    const writer = createObjectCsvWriter({ path: DB_FILE, header: [
+        { id: 'lastCheck', title: 'lastCheck' },
+        { id: 'rating', title: 'rating' },
+        { id: 'protocol', title: 'protocol' },
+        { id: 'country', title: 'country' },
+        { id: 'cidr', title: 'cidr' },
+        { id: 'tg', title: 'tg' },
+        { id: 'yt', title: 'yt' },
+        { id: 'quic', title: 'quic' },
+        { id: 'subscription', title: 'subscription' }
+    ]});
     await writer.writeRecords(records);
 }
 
@@ -239,7 +215,7 @@ async function main() {
         process.exit(1);
     }
 
-    const subscriptions = text.split('\n').map(parseSubscription).filter(Boolean);
+    let subscriptions = text.split('\n').map(parseSubscription).filter(Boolean);
     console.log(`✅ Отфильтровано серверов: ${subscriptions.length}`);
 
     const { results: pingResults, totalTime } = await pingAll(subscriptions);
@@ -267,8 +243,8 @@ async function main() {
                     protocol: sub.protocol,
                     country: sub.country,
                     cidr: sub.cidr,
-                    tg: sub.tg,
-                    yt: sub.yt,
+                    tg: 0,
+                    yt: 0,
                     quic: sub.quic,
                     subscription: sub.subscription
                 });
@@ -278,7 +254,6 @@ async function main() {
         }
 
         const record = dbMap.get(sub.quic);
-
         if (localPing > 0) record.lastCheck = today;
 
         if (localPing === -1) {
@@ -293,12 +268,13 @@ async function main() {
     db = Array.from(dbMap.values());
     await saveDatabase(db);
 
-    console.log(`\n📊 Итоги проверки:`);
+    console.log(`\n📊 Итоги:`);
     console.log(`   Проверено: ${checkedCount}`);
     console.log(`   Новых: ${newCount}`);
     console.log(`   Обновлено: ${updatedCount}`);
     console.log(`   Время пинга: ${totalTime} мс`);
 
+    // Формирование best-serv.txt
     const { createBestServFile } = require('./create-best-serv.js');
     await createBestServFile(db, OUTPUT_FILE, today, timeForFooter);
 

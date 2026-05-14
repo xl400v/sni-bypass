@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 1.4.0
- * Date: 13 May 2026
+ * Version: 1.4.1
+ * Date: 14 May 2026
  */
 
 const fs = require('fs');
@@ -13,7 +13,7 @@ const csvParser = require('csv-parser');
 
 const PING_THRESHOLD = 3000;
 const CONCURRENCY = 4;
-const MAX_PING_TIME_SECONDS = 30;   // ← Изменено на 30 секунд
+const MAX_PING_TIME_SECONDS = 30;
 
 const SUBSCRIPTIONS_URL = 'https://raw.githubusercontent.com/igareck/vpn-configs-for-russia/refs/heads/main/Vless-Reality-White-Lists-Rus-Mobile.txt';
 const DB_FILE = 'servers-db.csv';
@@ -87,7 +87,7 @@ function extractHostPort(line) {
     }
 }
 
-/** Только encoded флаги (по требованию) */
+/** Определение страны — только по encoded флагам */
 function getCountry(remark) {
     if (!remark) return 'EU';
 
@@ -101,6 +101,8 @@ function getCountry(remark) {
         '%F0%9F%87%B0%F0%9F%87%B7': 'KR',
         '%F0%9F%87%AB%F0%9F%87%AE': 'FI',
         '%F0%9F%87%AB%F0%9F%87%B7': 'FR',
+        '%F0%9F%87%B0%F0%9F%87%B8': 'KZ',   // Казахстан
+        '%F0%9F%87%B9%F0%9F%87%AD': 'TH'    // Таиланд
     };
 
     for (const [encodedFlag, code] of Object.entries(flagMap)) {
@@ -142,31 +144,35 @@ function parseSubscription(line) {
             protocol: protoType,
             country: getCountry(remark),
             cidr: remark.includes('CIDR') ? 1 : 0,
-            tg: 0,        // будет заполняться в отдельном скрипте
-            yt: 0,        // будет заполняться в отдельном скрипте
+            tg: 0,
+            yt: 0,
             quic: extractQuic(line),
-            hostPort: `${host}:${port}`
+            hostPort: `${host}:${port}`,
+            hasLowPriority: /\b(vpn|xhttp)\b/i.test(remark)   // флаг низкого приоритета
         };
     } catch (e) {
         return null;
     }
 }
 
-// ====================== БАЗА ДАННЫХ ======================
+// ====================== БАЗА ======================
 
-async function loadDatabase() { /* ... без изменений ... */ 
+async function loadDatabase() {
     if (!fs.existsSync(DB_FILE)) {
-        const writer = createObjectCsvWriter({ path: DB_FILE, header: [
-            { id: 'lastCheck', title: 'lastCheck' },
-            { id: 'rating', title: 'rating' },
-            { id: 'protocol', title: 'protocol' },
-            { id: 'country', title: 'country' },
-            { id: 'cidr', title: 'cidr' },
-            { id: 'tg', title: 'tg' },
-            { id: 'yt', title: 'yt' },
-            { id: 'quic', title: 'quic' },
-            { id: 'subscription', title: 'subscription' }
-        ]});
+        const writer = createObjectCsvWriter({
+            path: DB_FILE,
+            header: [
+                { id: 'lastCheck', title: 'lastCheck' },
+                { id: 'rating', title: 'rating' },
+                { id: 'protocol', title: 'protocol' },
+                { id: 'country', title: 'country' },
+                { id: 'cidr', title: 'cidr' },
+                { id: 'tg', title: 'tg' },
+                { id: 'yt', title: 'yt' },
+                { id: 'quic', title: 'quic' },
+                { id: 'subscription', title: 'subscription' }
+            ]
+        });
         await writer.writeRecords([]);
         return [];
     }
@@ -187,21 +193,24 @@ async function saveDatabase(records) {
         return parseInt(b.rating) - parseInt(a.rating);
     });
 
-    const writer = createObjectCsvWriter({ path: DB_FILE, header: [
-        { id: 'lastCheck', title: 'lastCheck' },
-        { id: 'rating', title: 'rating' },
-        { id: 'protocol', title: 'protocol' },
-        { id: 'country', title: 'country' },
-        { id: 'cidr', title: 'cidr' },
-        { id: 'tg', title: 'tg' },
-        { id: 'yt', title: 'yt' },
-        { id: 'quic', title: 'quic' },
-        { id: 'subscription', title: 'subscription' }
-    ]});
+    const writer = createObjectCsvWriter({
+        path: DB_FILE,
+        header: [
+            { id: 'lastCheck', title: 'lastCheck' },
+            { id: 'rating', title: 'rating' },
+            { id: 'protocol', title: 'protocol' },
+            { id: 'country', title: 'country' },
+            { id: 'cidr', title: 'cidr' },
+            { id: 'tg', title: 'tg' },
+            { id: 'yt', title: 'yt' },
+            { id: 'quic', title: 'quic' },
+            { id: 'subscription', title: 'subscription' }
+        ]
+    });
     await writer.writeRecords(records);
 }
 
-// ====================== ОСНОВНАЯ ЛОГИКА ======================
+// ====================== MAIN ======================
 
 async function main() {
     console.log('🚀 Запуск проверки серверов...\n');
@@ -268,13 +277,12 @@ async function main() {
     db = Array.from(dbMap.values());
     await saveDatabase(db);
 
-    console.log(`\n📊 Итоги:`);
+    console.log(`\n📊 Итоги проверки:`);
     console.log(`   Проверено: ${checkedCount}`);
     console.log(`   Новых: ${newCount}`);
     console.log(`   Обновлено: ${updatedCount}`);
     console.log(`   Время пинга: ${totalTime} мс`);
 
-    // Формирование best-serv.txt
     const { createBestServFile } = require('./create-best-serv.js');
     await createBestServFile(db, OUTPUT_FILE, today, timeForFooter);
 

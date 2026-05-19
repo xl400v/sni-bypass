@@ -1,9 +1,9 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.1
+ * Version: 2.0.2
  * Date: 14 May 2026
  * 
- * Проверка доступности t.me и youtube.com через реальные VPN-подключения с использованием Xray-core
+ * Проверка доступности t.me и youtube.com через Xray-core
  */
 
 const fs = require('fs');
@@ -54,12 +54,9 @@ async function saveDatabase(records) {
         ]
     });
     await writer.writeRecords(records);
-    console.log(`✅ База данных успешно обновлена (${records.length} записей)`);
+    console.log(`✅ База данных обновлена (${records.length} записей)`);
 }
 
-/**
- * Парсит vless-подписку и возвращает объект с параметрами
- */
 function parseVlessSubscription(subscription) {
     try {
         const urlPart = subscription.split('#')[0];
@@ -75,7 +72,6 @@ function parseVlessSubscription(subscription) {
             pbk: url.searchParams.get('pbk'),
             fp: url.searchParams.get('fp') || 'chrome',
             flow: url.searchParams.get('flow') || '',
-            path: url.searchParams.get('path') || '/',
             sid: url.searchParams.get('sid') || ''
         };
     } catch (e) {
@@ -84,9 +80,6 @@ function parseVlessSubscription(subscription) {
     }
 }
 
-/**
- * Создаёт временный конфиг Xray
- */
 function createXrayConfig(parsed) {
     return {
         log: { loglevel: "none" },
@@ -123,22 +116,15 @@ function createXrayConfig(parsed) {
     };
 }
 
-/**
- * Проверяет доступность сайта через Xray
- */
 async function checkSiteThroughXray(subscription, site) {
     const parsed = parseVlessSubscription(subscription);
-    if (!parsed) {
-        console.log(`   ⚠️ Не удалось распарсить подписку`);
-        return 0;
-    }
+    if (!parsed) return 0;
 
-    // Создаём конфиг
     const xrayConfig = createXrayConfig(parsed);
     fs.writeFileSync(TEMP_CONFIG_PATH, JSON.stringify(xrayConfig, null, 2));
 
     return new Promise((resolve) => {
-        console.log(`   → Запуск Xray для проверки ${site}...`);
+        console.log(`   → Запуск Xray для ${site}...`);
 
         const xrayProcess = spawn(XRAY_PATH, ['run', '-c', TEMP_CONFIG_PATH], {
             stdio: ['ignore', 'ignore', 'pipe']
@@ -149,7 +135,6 @@ async function checkSiteThroughXray(subscription, site) {
             resolve(0);
         }, TEST_TIMEOUT_MS);
 
-        // Проверка через curl
         setTimeout(async () => {
             try {
                 const { execSync } = require('child_process');
@@ -167,11 +152,11 @@ async function checkSiteThroughXray(subscription, site) {
                 xrayProcess.kill();
                 resolve(0);
             }
-        }, 1800); // даём Xray время на запуск
+        }, 2000);
     });
 }
 
-// ====================== ГЛАВНАЯ ФУНКЦИЯ ======================
+// ====================== MAIN ======================
 
 async function checkTGandYT() {
     console.log('🚀 Запуск проверки t.me и youtube.com через Xray-core...\n');
@@ -192,21 +177,15 @@ async function checkTGandYT() {
         record.yt = String(ytResult);
 
         updatedCount++;
-
         await new Promise(r => setTimeout(r, CHECK_DELAY_MS));
     }
 
     await saveDatabase(db);
 
-    // Очистка временного конфига
-    if (fs.existsSync(TEMP_CONFIG_PATH)) {
-        fs.unlinkSync(TEMP_CONFIG_PATH);
-    }
+    if (fs.existsSync(TEMP_CONFIG_PATH)) fs.unlinkSync(TEMP_CONFIG_PATH);
 
     console.log(`\n✅ Проверка TG и YT завершена! Обновлено записей: ${updatedCount}`);
 }
-
-// ====================== ЗАПУСК ======================
 
 checkTGandYT().catch(err => {
     console.error('💥 Критическая ошибка:', err);

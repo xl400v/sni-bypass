@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.2
+ * Version: 2.0.3
  * Date: 14 May 2026
  * 
  * Автоматическая загрузка Xray в node_modules/.bin
@@ -14,7 +14,6 @@ const { execSync } = require('child_process');
 const config = require('./config');
 
 const PLATFORM = (process.argv[2] || 'linux').toLowerCase();
-//const BIN_DIR = path.join(__dirname, 'node_modules', '.bin');
 const XRAY_PATH = config.XRAY_PATH;
 const BIN_DIR = path.dirname(XRAY_PATH);
 
@@ -41,10 +40,7 @@ function downloadFile(url, dest) {
                 return downloadFile(response.headers.location, dest).then(resolve).catch(reject);
             }
             response.pipe(file);
-            file.on('finish', () => {
-                file.close();
-                resolve();
-            });
+            file.on('finish', () => { file.close(); resolve(); });
         }).on('error', (err) => {
             fs.unlink(dest, () => {});
             reject(err);
@@ -54,16 +50,13 @@ function downloadFile(url, dest) {
 
 async function main() {
     try {
-        if (!fs.existsSync(BIN_DIR)) {
-            fs.mkdirSync(BIN_DIR, { recursive: true });
-        }
+        if (!fs.existsSync(BIN_DIR)) fs.mkdirSync(BIN_DIR, { recursive: true });
 
         await downloadFile(downloadUrl, ZIP_PATH);
 
         console.log('📦 Распаковываем Xray...');
         execSync(`unzip -o "${ZIP_PATH}" -d "${BIN_DIR}"`, { stdio: 'inherit' });
 
-        // Для Linux/macOS устанавливаем права
         if (PLATFORM !== 'windows' && fs.existsSync(XRAY_PATH)) {
             fs.chmodSync(XRAY_PATH, '755');
         }
@@ -74,7 +67,7 @@ async function main() {
         console.log(`   Путь: ${XRAY_PATH}`);
 
     } catch (error) {
-        console.error('❌ Ошибка при установке Xray:', error.message);
+        console.error('❌ Ошибка установки Xray:', error.message);
     }
 }
 

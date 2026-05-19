@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.6
+ * Version: 2.0.7
  * Date: 19 May 2026
  */
 
@@ -54,6 +54,7 @@ module.exports = {
         '%F0%9F%87%A8%F0%9F%87%A6': 'CA',
         '%F0%9F%87%BA%F0%9F%87%B8': 'US',
         '%F0%9F%87%A6%F0%9F%87%B9': 'AT',
-        '%F0%9F%87%AA%F0%9F%87%AA': 'EE'
+        '%F0%9F%87%AA%F0%9F%87%AA': 'EE',
+        '%F0%9F%87%B8%F0%9F%87%AA': 'SE'    // Швеция
     }
 };

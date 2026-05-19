@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.6
+ * Version: 2.0.7
  * Date: 19 May 2026
  */
 
@@ -15,7 +15,7 @@ const {
     XRAY_PATH, 
     TEMP_CONFIG_PATH, 
     CHECK_DELAY_MS 
-} = config;   // TEST_TIMEOUT_MS удалён
+} = config;
 
 async function loadDatabase() {
     if (!fs.existsSync(DB_FILE)) return [];
@@ -126,12 +126,12 @@ async function verifyAccess() {
             ]);
 
             if (tg.success) {
-                record.tg = String(tg.latency);
+                record.tg = String(tg.latency);           // Записываем реальное время в ms
                 record.rating = String(parseInt(record.rating) + 10);
                 console.log(`   ✅ t.me   — ${tg.latency} ms`);
             }
             if (yt.success) {
-                record.yt = String(yt.latency);
+                record.yt = String(yt.latency);           // Записываем реальное время в ms
                 record.rating = String(parseInt(record.rating) + 10);
                 console.log(`   ✅ youtube — ${yt.latency} ms`);
             }

@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.4
+ * Version: 2.0.5
  * Date: 19 May 2026
  */
 
@@ -91,7 +91,7 @@ async function checkSiteThroughXray(subscription, site) {
             try {
                 const { execSync } = require('child_process');
                 const output = execSync(`curl -I -s --socks5 127.0.0.1:1080 --max-time 5 https://${site}`, { timeout: 6000 }).toString();
-                const success = output.includes('HTTP/') || output.includes('302') || output.includes('200');
+                const success = output.includes('HTTP/') || output.includes('200');
                 const latency = Date.now() - start;
                 proc.kill();
                 resolve({ success: success ? 1 : 0, latency });
@@ -113,31 +113,40 @@ async function verifyAccess() {
 
     console.log(`Найдено записей для проверки: ${toCheck.length}\n`);
 
-    let updated = 0;
+    // Параллельная проверка в 2 потока
+    const queue = [...toCheck];
+    const workers = Array.from({ length: 2 }, async () => {
+        while (queue.length > 0) {
+            const record = queue.shift();
+            if (!record) break;
 
-    for (const record of toCheck) {
-        console.log(`[${++updated}/${toCheck.length}] ${record.country.padEnd(4)} | ${record.protocol}`);
+            console.log(`Проверка → ${record.country.padEnd(4)} | ${record.protocol}`);
 
-        const tg = await checkSiteThroughXray(record.subscription, 't.me');
-        const yt = await checkSiteThroughXray(record.subscription, 'youtube.com');
+            const [tg, yt] = await Promise.all([
+                checkSiteThroughXray(record.subscription, 't.me'),
+                checkSiteThroughXray(record.subscription, 'youtube.com')
+            ]);
 
-        if (tg.success) {
-            record.tg = String(tg.latency);
-            record.rating = String(parseInt(record.rating) + 10);
-            console.log(`   ✅ t.me  — ${tg.latency} ms`);
+            if (tg.success) {
+                record.tg = String(tg.latency);
+                record.rating = String(parseInt(record.rating) + 10);
+                console.log(`   ✅ t.me   — ${tg.latency} ms`);
+            }
+            if (yt.success) {
+                record.yt = String(yt.latency);
+                record.rating = String(parseInt(record.rating) + 10);
+                console.log(`   ✅ youtube — ${yt.latency} ms`);
+            }
+            await new Promise(r => setTimeout(r, CHECK_DELAY_MS));
         }
-        if (yt.success) {
-            record.yt = String(yt.latency);
-            record.rating = String(parseInt(record.rating) + 10);
-            console.log(`   ✅ youtube — ${yt.latency} ms`);
-        }
-        await new Promise(r => setTimeout(r, CHECK_DELAY_MS));
-    }
+    });
+
+    await Promise.all(workers);
 
     await saveDatabase(db);
     if (fs.existsSync(TEMP_CONFIG_PATH)) fs.unlinkSync(TEMP_CONFIG_PATH);
 
-    console.log(`\n✅ Проверка завершена. Обновлено записей: ${updated}`);
+    console.log(`\n✅ Проверка завершена.`);
 }
 
 verifyAccess().catch(err => console.error('💥 Ошибка:', err));

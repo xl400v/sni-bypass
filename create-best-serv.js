@@ -1,13 +1,10 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.1
- * Date: 14 May 2026
+ * Version: 2.0.3
+ * Date: 19 May 2026
  */
 
 const fs = require('fs');
-//const config = require('./config');
-
-//const { OUTPUT_FILE } = config;   // можно использовать, если захотим
 
 const header = `#profile-title: 🧢 Free Rnd Serv\n` +
                `#profile-update-interval: 4\n` +
@@ -27,35 +24,23 @@ function extractHostPortFromSubscription(subscription) {
 }
 
 async function createBestServFile(db, outputFile, today, timeForFooter) {
-    if (!db || db.length === 0) {
-        console.log('⚠️ База данных пуста.');
-        return;
-    }
+    if (!db || db.length === 0) return;
 
-    let tempList = db.map(record => ({
-        ...record,
-        priority: 3
-    }));
+    let tempList = db.map(record => ({ ...record, priority: 3 }));
 
     let ruFound = false;
 
     for (const record of tempList) {
         const remarkLower = (record.subscription || '').toLowerCase();
-        const hasVpnOrXhttp = /\b(vpn|xhttp)\b/i.test(remarkLower);
+        const hasLow = /\b(vpn|xhttp)\b/i.test(remarkLower);
 
         if (record.country === 'RU') {
-            if (!ruFound) {
-                record.priority = 1;
-                ruFound = true;
-            } else {
-                record.priority = 4;
-            }
-        } 
-        else if (record.country !== 'EU') {
-            record.priority = hasVpnOrXhttp ? 5 : 2;
-        } 
-        else {
-            record.priority = hasVpnOrXhttp ? 5 : 3;
+            record.priority = !ruFound ? 1 : 4;
+            if (!ruFound) ruFound = true;
+        } else if (record.country !== 'EU') {
+            record.priority = hasLow ? 5 : 2;
+        } else {
+            record.priority = hasLow ? 5 : 3;
         }
     }
 
@@ -63,15 +48,9 @@ async function createBestServFile(db, outputFile, today, timeForFooter) {
     const finalList = [];
 
     for (const record of tempList) {
-        const hostPort = extractHostPortFromSubscription(record.subscription);
-        if (!hostPort) continue;
-
-        if (seen.has(hostPort)) {
-            record.priority = 5;
-            continue;
-        }
-
-        seen.add(hostPort);
+        const hp = extractHostPortFromSubscription(record.subscription);
+        if (!hp || seen.has(hp)) continue;
+        seen.add(hp);
         finalList.push(record);
     }
 
@@ -80,16 +59,11 @@ async function createBestServFile(db, outputFile, today, timeForFooter) {
     const best = finalList.slice(0, 4);
 
     let content = header;
-
-    best.forEach(record => {
-        content += record.subscription + '\n';
-    });
-
+    best.forEach(r => content += r.subscription + '\n');
     content += `vless://1.1.1.1:443?type=tcp#Checked%20${today}T${timeForFooter.split(' ')[1]}%20%F0%9F%AA%83\n`;
 
     fs.writeFileSync(outputFile, content.trim());
-
-    console.log(`📄 ${outputFile} успешно создан (${best.length} серверов)`);
+    console.log(`📄 ${outputFile} создан (${best.length} серверов)`);
 }
 
 module.exports = { createBestServFile };

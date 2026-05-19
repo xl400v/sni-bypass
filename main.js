@@ -1,71 +1,26 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.1
- * Date: 14 May 2026
+ * Version: 2.0.4
+ * Date: 19 May 2026
  */
 
 const fs = require('fs');
-const net = require('net');
-const { performance } = require('perf_hooks');
 const fetch = require('node-fetch');
 const { createObjectCsvWriter } = require('csv-writer');
 const csvParser = require('csv-parser');
 const config = require('./config');
 
 const { 
-    SUBSCRIPTIONS_URL, 
+    DEFAULT_SUBSCRIPTIONS_URL,
     DB_FILE, 
     OUTPUT_FILE, 
-    PING_THRESHOLD, 
-    CONCURRENCY, 
-    MAX_PING_TIME_SECONDS,
-    FTP_CONFIG 
+    FTP_CONFIG,
+    COUNTRY_FLAGS,
+    INITIAL_RATING,
+    CSV_HEADER 
 } = config;
 
 // ====================== УТИЛИТЫ ======================
-
-async function tcpPing(host, port = 443, timeout = PING_THRESHOLD * 2) {
-    return new Promise((resolve) => {
-        const start = performance.now();
-        const socket = net.createConnection({ host, port }, () => {
-            const latency = Math.round(performance.now() - start);
-            socket.destroy();
-            resolve(latency);
-        });
-
-        socket.setTimeout(timeout, () => { socket.destroy(); resolve(-1); });
-        socket.on('error', () => resolve(-1));
-    });
-}
-
-async function pingAll(subscriptions) {
-    const startTime = performance.now();
-    const results = [];
-    let isTimeoutReached = false;
-    const queue = [...subscriptions];
-
-    const workers = Array.from({ length: CONCURRENCY }, async () => {
-        while (queue.length > 0 && !isTimeoutReached) {
-            const sub = queue.shift();
-            if (!sub) break;
-
-            const ping = await tcpPing(sub.host, sub.port);
-            results.push({ ...sub, localPing: ping });
-
-            if (MAX_PING_TIME_SECONDS > 0) {
-                const elapsed = (performance.now() - startTime) / 1000;
-                if (elapsed > MAX_PING_TIME_SECONDS) {
-                    isTimeoutReached = true;
-                }
-            }
-        }
-    });
-
-    await Promise.all(workers);
-    const totalTime = (performance.now() - startTime).toFixed(0);
-    console.log(`⚡ Параллельный пинг завершён за ${totalTime} мс`);
-    return { results, totalTime };
-}
 
 function extractQuic(line) {
     const match = line.match(/(?<=\/)[^\/@]+(?=@)/);
@@ -74,22 +29,7 @@ function extractQuic(line) {
 
 function getCountry(remark) {
     if (!remark) return 'EU';
-
-    const flagMap = {
-        '%F0%9F%87%A9%F0%9F%87%AA': 'DE',
-        '%F0%9F%87%B7%F0%9F%87%BA': 'RU',
-        '%F0%9F%87%B1%F0%9F%87%B9': 'LT',
-        '%F0%9F%87%B3%F0%9F%87%B1': 'NL',
-        '%F0%9F%87%B5%F0%9F%87%B1': 'PL',
-        '%F0%9F%87%B1%F0%9F%87%BB': 'LV',
-        '%F0%9F%87%B0%F0%9F%87%B7': 'KR',
-        '%F0%9F%87%AB%F0%9F%87%AE': 'FI',
-        '%F0%9F%87%AB%F0%9F%87%B7': 'FR',
-        '%F0%9F%87%B0%F0%9F%87%BF': 'KZ',
-        '%F0%9F%87%B9%F0%9F%87%AD': 'TH'
-    };
-
-    for (const [encodedFlag, code] of Object.entries(flagMap)) {
+    for (const [encodedFlag, code] of Object.entries(COUNTRY_FLAGS)) {
         if (remark.includes(encodedFlag)) return code;
     }
     return 'EU';
@@ -110,9 +50,8 @@ function parseSubscription(line) {
         const sni = url.searchParams.get('sni') || host;
 
         let protoType = '';
-        if (protocolRaw === 'HYSTERIA2') {
-            protoType = 'HYSTERIA2+TLS';
-        } else if (protocolRaw === 'VLESS' && security === 'reality') {
+        if (protocolRaw === 'HYSTERIA2') protoType = 'HYSTERIA2+TLS';
+        else if (protocolRaw === 'VLESS' && security === 'reality') {
             if (type === 'tcp') protoType = 'VLESS+TCP+REALITY';
             else if (type === 'xhttp') protoType = 'VLESS+XHTTP+REALITY';
         }
@@ -137,24 +76,11 @@ function parseSubscription(line) {
     }
 }
 
-// ====================== РАБОТА С БАЗОЙ ======================
+// ====================== БАЗА ======================
 
 async function loadDatabase() {
     if (!fs.existsSync(DB_FILE)) {
-        const writer = createObjectCsvWriter({
-            path: DB_FILE,
-            header: [
-                { id: 'lastCheck', title: 'lastCheck' },
-                { id: 'rating', title: 'rating' },
-                { id: 'protocol', title: 'protocol' },
-                { id: 'country', title: 'country' },
-                { id: 'cidr', title: 'cidr' },
-                { id: 'tg', title: 'tg' },
-                { id: 'yt', title: 'yt' },
-                { id: 'quic', title: 'quic' },
-                { id: 'subscription', title: 'subscription' }
-            ]
-        });
+        const writer = createObjectCsvWriter({ path: DB_FILE, header: CSV_HEADER });
         await writer.writeRecords([]);
         return [];
     }
@@ -175,33 +101,28 @@ async function saveDatabase(records) {
         return parseInt(b.rating) - parseInt(a.rating);
     });
 
-    const writer = createObjectCsvWriter({
-        path: DB_FILE,
-        header: [
-            { id: 'lastCheck', title: 'lastCheck' },
-            { id: 'rating', title: 'rating' },
-            { id: 'protocol', title: 'protocol' },
-            { id: 'country', title: 'country' },
-            { id: 'cidr', title: 'cidr' },
-            { id: 'tg', title: 'tg' },
-            { id: 'yt', title: 'yt' },
-            { id: 'quic', title: 'quic' },
-            { id: 'subscription', title: 'subscription' }
-        ]
-    });
+    const writer = createObjectCsvWriter({ path: DB_FILE, header: CSV_HEADER });
     await writer.writeRecords(records);
 }
 
-// ====================== ОСНОВНАЯ ЛОГИКА ======================
+// ====================== MAIN ======================
 
 async function main() {
-    console.log('🚀 Запуск проверки серверов...\n');
+    // Обработка аргументов
+    const args = process.argv.slice(2);
+    const verifyMode = args.includes('--verify') || args.includes('-v');
+    const customUrl = args.find(arg => !arg.startsWith('-') && arg.includes('http'));
+
+    const url = customUrl || DEFAULT_SUBSCRIPTIONS_URL;
+
+    console.log(`🚀 Запуск обработки серверов...`);
+    console.log(`   Источник: ${url}`);
 
     let text;
     try {
-        const res = await fetch(SUBSCRIPTIONS_URL);
+        const res = await fetch(url);
         text = await res.text();
-    } catch {
+    } catch (e) {
         console.error('❌ Нет доступа к файлу подписок.');
         process.exit(1);
     }
@@ -209,49 +130,33 @@ async function main() {
     const subscriptions = text.split('\n').map(parseSubscription).filter(Boolean);
     console.log(`✅ Отфильтровано серверов: ${subscriptions.length}`);
 
-    const { results: pingResults, totalTime } = await pingAll(subscriptions);
-
     let db = await loadDatabase();
     const dbMap = new Map(db.map(r => [r.quic, r]));
 
-    let newCount = 0, updatedCount = 0, checkedCount = 0;
+    let newCount = 0, updatedCount = 0;
 
     const now = new Date();
     const today = now.toISOString().split('T')[0];
     const timeForFooter = now.toISOString().slice(0, 16).replace('T', ' ');
 
-    for (const sub of pingResults) {
+    for (const sub of subscriptions) {
         if (!sub.quic) continue;
-        checkedCount++;
-
-        const localPing = sub.localPing;
 
         if (!dbMap.has(sub.quic)) {
-            if (localPing > 0 && localPing < PING_THRESHOLD * 3) {
-                dbMap.set(sub.quic, {
-                    lastCheck: today,
-                    rating: "90",
-                    protocol: sub.protocol,
-                    country: sub.country,
-                    cidr: sub.cidr,
-                    tg: 0,
-                    yt: 0,
-                    quic: sub.quic,
-                    subscription: sub.subscription
-                });
-                newCount++;
-            }
-            continue;
-        }
-
-        const record = dbMap.get(sub.quic);
-        if (localPing > 0) record.lastCheck = today;
-
-        if (localPing === -1) {
-            record.rating = String(Math.max(0, parseInt(record.rating) - 2));
-            updatedCount++;
-        } else if (localPing > PING_THRESHOLD) {
-            record.rating = String(Math.max(0, parseInt(record.rating) - 1));
+            dbMap.set(sub.quic, {
+                lastCheck: today,
+                rating: String(INITIAL_RATING),
+                protocol: sub.protocol,
+                country: sub.country,
+                cidr: sub.cidr,
+                tg: 0,
+                yt: 0,
+                quic: sub.quic,
+                subscription: sub.subscription
+            });
+            newCount++;
+        } else {
+            dbMap.get(sub.quic).lastCheck = today;
             updatedCount++;
         }
     }
@@ -259,11 +164,16 @@ async function main() {
     db = Array.from(dbMap.values());
     await saveDatabase(db);
 
-    console.log(`\n📊 Итоги проверки:`);
-    console.log(`   Проверено: ${checkedCount}`);
+    console.log(`\n📊 Итоги обработки:`);
     console.log(`   Новых: ${newCount}`);
     console.log(`   Обновлено: ${updatedCount}`);
-    console.log(`   Время пинга: ${totalTime} мс`);
+
+    // Запуск проверки TG/YT (только если указан флаг)
+    if (verifyMode) {
+        console.log('\n🔄 Запуск проверки TG и YouTube...');
+        const { verifyAccess } = require('./verify-access.js');
+        await verifyAccess();
+    }
 
     const { createBestServFile } = require('./create-best-serv.js');
     await createBestServFile(db, OUTPUT_FILE, today, timeForFooter);

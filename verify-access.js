@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.7
+ * Version: 2.0.8
  * Date: 19 May 2026
  */
 
@@ -32,6 +32,18 @@ async function loadDatabase() {
 async function saveDatabase(records) {
     const writer = createObjectCsvWriter({ path: DB_FILE, header: config.CSV_HEADER });
     await writer.writeRecords(records);
+}
+
+function extractHostPort(subscription) {
+    try {
+        const urlPart = subscription.split('#')[0];
+        const atIndex = urlPart.indexOf('@');
+        const questionIndex = urlPart.indexOf('?');
+        if (atIndex === -1 || questionIndex === -1) return 'unknown';
+        return urlPart.substring(atIndex + 1, questionIndex);
+    } catch (e) {
+        return 'unknown';
+    }
 }
 
 function parseVlessSubscription(sub) {
@@ -112,37 +124,38 @@ async function verifyAccess() {
 
     console.log(`Найдено записей для проверки: ${toCheck.length}\n`);
 
-    const queue = [...toCheck];
-    const workers = Array.from({ length: 2 }, async () => {
-        while (queue.length > 0) {
-            const record = queue.shift();
-            if (!record) break;
+    for (const record of toCheck) {
+        const hostPort = extractHostPort(record.subscription);
+        console.log(`Проверка → ${record.country.padEnd(4)} | ${hostPort}`);
 
-            console.log(`Проверка → ${record.country.padEnd(4)} | ${record.protocol}`);
+        // Проверяем оба сайта последовательно
+        const tgResult = await checkSiteThroughXray(record.subscription, 't.me');
+        const ytResult = await checkSiteThroughXray(record.subscription, 'youtube.com');
 
-            const [tg, yt] = await Promise.all([
-                checkSiteThroughXray(record.subscription, 't.me'),
-                checkSiteThroughXray(record.subscription, 'youtube.com')
-            ]);
-
-            if (tg.success) {
-                record.tg = String(tg.latency);           // Записываем реальное время в ms
-                record.rating = String(parseInt(record.rating) + 10);
-                console.log(`   ✅ t.me   — ${tg.latency} ms`);
-            }
-            if (yt.success) {
-                record.yt = String(yt.latency);           // Записываем реальное время в ms
-                record.rating = String(parseInt(record.rating) + 10);
-                console.log(`   ✅ youtube — ${yt.latency} ms`);
-            }
-
-            await new Promise(r => setTimeout(r, CHECK_DELAY_MS));
+        // Обновляем базу
+        if (tgResult.success) {
+            record.tg = String(tgResult.latency);
+            record.rating = String(parseInt(record.rating) + 10);
+            console.log(`   ✅ t.me   — ${tgResult.latency} ms`);
+        } else {
+            record.tg = "0";
+            console.log(`   ❌ t.me   — недоступен`);
         }
-    });
 
-    await Promise.all(workers);
+        if (ytResult.success) {
+            record.yt = String(ytResult.latency);
+            record.rating = String(parseInt(record.rating) + 10);
+            console.log(`   ✅ youtube — ${ytResult.latency} ms`);
+        } else {
+            record.yt = "0";
+            console.log(`   ❌ youtube — недоступен`);
+        }
+
+        await new Promise(r => setTimeout(r, CHECK_DELAY_MS));
+    }
 
     await saveDatabase(db);
+
     if (fs.existsSync(TEMP_CONFIG_PATH)) fs.unlinkSync(TEMP_CONFIG_PATH);
 
     console.log(`\n✅ Проверка завершена.`);

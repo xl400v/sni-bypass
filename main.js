@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.5
+ * Version: 2.0.8
  * Date: 19 May 2026
  */
 
@@ -109,8 +109,6 @@ async function saveDatabase(records) {
 
 async function main() {
     const args = process.argv.slice(2);
-    
-    // Поддержка запуска с флагами типа --trace-warning
     const verifyMode = args.includes('--verify') || args.includes('-c');
     const customUrl = args.find(arg => arg.startsWith('http'));
 
@@ -169,7 +167,6 @@ async function main() {
     console.log(`   Новых: ${newCount}`);
     console.log(`   Обновлено: ${updatedCount}`);
 
-    // Запуск проверки доступа
     if (verifyMode) {
         console.log('\n🔄 Запуск проверки TG и YouTube...');
         const { verifyAccess } = require('./verify-access.js');

@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.3
+ * Version: 2.0.6
  * Date: 19 May 2026
  */
 
@@ -33,14 +33,20 @@ async function createBestServFile(db, outputFile, today, timeForFooter) {
     for (const record of tempList) {
         const remarkLower = (record.subscription || '').toLowerCase();
         const hasLow = /\b(vpn|xhttp)\b/i.test(remarkLower);
+        const isGoodCIDR = record.cidr == 1 && parseInt(record.yt || 0) > 0 && parseInt(record.tg || 0) > 0;
 
         if (record.country === 'RU') {
             record.priority = !ruFound ? 1 : 4;
             if (!ruFound) ruFound = true;
-        } else if (record.country !== 'EU') {
-            record.priority = hasLow ? 5 : 2;
-        } else {
+        } 
+        else if (isGoodCIDR) {
+            record.priority = 2;                    // Новый высокий приоритет
+        } 
+        else if (record.country !== 'EU') {
             record.priority = hasLow ? 5 : 3;
+        } 
+        else {
+            record.priority = hasLow ? 5 : 4;
         }
     }
 
@@ -55,7 +61,6 @@ async function createBestServFile(db, outputFile, today, timeForFooter) {
     }
 
     finalList.sort((a, b) => a.priority - b.priority);
-
     const best = finalList.slice(0, 4);
 
     let content = header;
@@ -63,7 +68,7 @@ async function createBestServFile(db, outputFile, today, timeForFooter) {
     content += `vless://1.1.1.1:443?type=tcp#Checked%20${today}T${timeForFooter.split(' ')[1]}%20%F0%9F%AA%83\n`;
 
     fs.writeFileSync(outputFile, content.trim());
-    console.log(`📄 ${outputFile} создан (${best.length} серверов)`);
+    console.log(`📄 ${outputFile} успешно создан (${best.length} серверов)`);
 }
 
 module.exports = { createBestServFile };

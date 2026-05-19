@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.5
+ * Version: 2.0.6
  * Date: 19 May 2026
  */
 
@@ -14,9 +14,8 @@ const {
     DB_FILE, 
     XRAY_PATH, 
     TEMP_CONFIG_PATH, 
-    TEST_TIMEOUT_MS, 
     CHECK_DELAY_MS 
-} = config;
+} = config;   // TEST_TIMEOUT_MS удалён
 
 async function loadDatabase() {
     if (!fs.existsSync(DB_FILE)) return [];
@@ -113,7 +112,6 @@ async function verifyAccess() {
 
     console.log(`Найдено записей для проверки: ${toCheck.length}\n`);
 
-    // Параллельная проверка в 2 потока
     const queue = [...toCheck];
     const workers = Array.from({ length: 2 }, async () => {
         while (queue.length > 0) {
@@ -137,6 +135,7 @@ async function verifyAccess() {
                 record.rating = String(parseInt(record.rating) + 10);
                 console.log(`   ✅ youtube — ${yt.latency} ms`);
             }
+
             await new Promise(r => setTimeout(r, CHECK_DELAY_MS));
         }
     });

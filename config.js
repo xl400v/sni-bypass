@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.4
+ * Version: 2.0.6
  * Date: 19 May 2026
  */
 
@@ -24,7 +24,6 @@ module.exports = {
 
     XRAY_PATH: path.join(__dirname, 'node_modules', '.bin', isWindows ? 'xray.exe' : 'xray'),
     TEMP_CONFIG_PATH: 'temp-xray-config.json',
-    TEST_TIMEOUT_MS: 10000,
     CHECK_DELAY_MS: 1200,
 
     CSV_HEADER: [
@@ -53,6 +52,8 @@ module.exports = {
         '%F0%9F%87%B9%F0%9F%87%AD': 'TH',
         '%F0%9F%87%AC%F0%9F%87%A7': 'GB',
         '%F0%9F%87%A8%F0%9F%87%A6': 'CA',
-        '%F0%9F%87%BA%F0%9F%87%B8': 'US'
+        '%F0%9F%87%BA%F0%9F%87%B8': 'US',
+        '%F0%9F%87%A6%F0%9F%87%B9': 'AT',
+        '%F0%9F%87%AA%F0%9F%87%AA': 'EE'
     }
 };

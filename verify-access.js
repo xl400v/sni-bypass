@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.9
- * Date: 19 May 2026
+ * Version: 2.1.0
+ * Date: 20 May 2026
  */
 
 const fs = require('fs');
@@ -14,6 +14,7 @@ const {
     DB_FILE, 
     XRAY_PATH, 
     TEMP_CONFIG_PATH, 
+    INITIAL_RATING, 
     CHECK_DELAY_MS 
 } = config;
 
@@ -103,8 +104,8 @@ async function checkSite(subscription, site) {
             try {
                 const { execSync } = require('child_process');
                 const output = execSync(
-                    `curl -I -s --socks5 127.0.0.1:1080 --max-time 6 https://${site}`, 
-                    { timeout: 7000 }
+                    `curl -I -s --socks5 127.0.0.1:1080 --max-time 7 https://${site}`, 
+                    { timeout: CHECK_DELAY_MS * 4 }
                 ).toString();
 
                 const success = output.includes('HTTP/') || output.includes('200');
@@ -116,64 +117,55 @@ async function checkSite(subscription, site) {
                 proc.kill();
                 resolve({ success: 0, latency: 0 });
             }
-        }, 2000); // время на запуск Xray
+        }, CHECK_DELAY_MS); // время на запуск Xray
     });
 }
 
 // ====================== MAIN ======================
 
-function verifyAccess(db) {
+async function verifyAccess(db, today) {
     console.log('🚀 Запуск проверки telegram.org и youtube.com...\n');
 
-    const today = new Date().toISOString().split('T')[0];
-    const toCheck = db.filter(r => r.lastCheck === today && parseInt(r.rating) === 70);
+    const toCheck = db.filter(r => r.lastCheck === today && parseInt(r.rating) === INITIAL_RATING);
 
     console.log(`Найдено записей для проверки: ${toCheck.length}\n`);
 
-    let index = 0;
-
-    function processNext() {
-        if (index >= toCheck.length) {
-            saveDatabase(db).then(() => {
-                if (fs.existsSync(TEMP_CONFIG_PATH)) fs.unlinkSync(TEMP_CONFIG_PATH);
-                console.log(`\n✅ Проверка завершена.`);
-            });
-            return;
-        }
-
-        const record = toCheck[index];
+    for (const record of toCheck) {
         const hostPort = extractHostPort(record.subscription);
         console.log(`Проверка → ${record.country.padEnd(4)} | ${hostPort}`);
 
         // Проверка t.me
-        checkSite(record.subscription, 'telegram.org').then(tgResult => {
+        await checkSite(record.subscription, 'telegram.org').then(tgResult => {
             if (tgResult.success) {
                 record.tg = String(tgResult.latency);
                 record.rating = String(parseInt(record.rating) + 10);
                 console.log(`   ✅ telegram.org → ${tgResult.latency} ms`);
             } else {
                 record.tg = "0";
+                record.rating = String(parseInt(record.rating) - 5);
                 console.log(`   ❌ telegram.org → недоступен`);
             }
-
-            // Проверка youtube.com
-            checkSite(record.subscription, 'youtube.com').then(ytResult => {
-                if (ytResult.success) {
-                    record.yt = String(ytResult.latency);
-                    record.rating = String(parseInt(record.rating) + 10);
-                    console.log(`   ✅ youtube.com → ${ytResult.latency} ms`);
-                } else {
-                    record.yt = "0";
-                    console.log(`   ❌ youtube.com → недоступен`);
-                }
-
-                index++;
-                setTimeout(processNext, CHECK_DELAY_MS);
-            });
+        });
+        // Проверка youtube.com
+        await checkSite(record.subscription, 'youtube.com').then(ytResult => {
+            if (ytResult.success) {
+                record.yt = String(ytResult.latency);
+                record.rating = String(parseInt(record.rating) + 10);
+                console.log(`   ✅ youtube.com → ${ytResult.latency} ms`);
+            } else {
+                record.yt = "0";
+                record.rating = String(parseInt(record.rating) - 5);
+                console.log(`   ❌ youtube.com → недоступен`);
+            }
+        });
+        await new Promise(r => setTimeout(r, CHECK_DELAY_MS));
+    }
+    if (toCheck.length > 0) {
+        await saveDatabase(db).then(() => {
+            if (fs.promises.access(TEMP_CONFIG_PATH)) fs.promises.unlink(TEMP_CONFIG_PATH);
+            console.log(`\n✅ Проверка "verifyAccess" завершена.`);
         });
     }
-
-    processNext();
 }
 
 async function saveDatabase(records) {

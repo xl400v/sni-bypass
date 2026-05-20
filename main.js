@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.9
- * Date: 19 May 2026
+ * Version: 2.1.0
+ * Date: 20 May 2026
  */
 
 const fs = require('fs');
@@ -136,7 +136,6 @@ async function main() {
 
     const now = new Date();
     const today = now.toISOString().split('T')[0];
-    const timeForFooter = now.toISOString().slice(0, 16).replace('T', ' ');
 
     for (const sub of subscriptions) {
         if (!sub.quic) continue;
@@ -167,27 +166,37 @@ async function main() {
     console.log(`   Новых: ${newCount}`);
     console.log(`   Обновлено: ${updatedCount}`);
 
-    // === Проверка TG/YT ===
-    if (verifyMode) {
-        console.log('\n🔄 Запуск проверки TG и YouTube...');
-        try {
-            const { verifyAccess } = require('./verify-access.js');
-            verifyAccess(db);   // Передаём уже загруженную базу
-        } catch (err) {
-            console.error('❌ Ошибка при выполнении проверки TG/YT:', err.message);
+    try {
+        // === Проверка TG/YT ===
+        if (verifyMode) {
+            try {
+                const { verifyAccess } = require('./verify-access.js');
+                await verifyAccess(db, today);
+            } catch (e) {
+                console.error('❌ Ошибка при выполнении проверки TG/YT:', e.message);
+            }
         }
-    }
 
-    const { createBestServFile } = require('./create-best-serv.js');
-    await createBestServFile(db, OUTPUT_FILE, today, timeForFooter);
+        const { createBestServFile } = require('./create-best-serv.js');
+        await createBestServFile(db, OUTPUT_FILE, today);
 
-    if (fs.existsSync(OUTPUT_FILE)) {
-        console.log('📤 Загрузка на FTP...');
-        const { uploadToFTP } = require('./ftp-upload.js');
-        await uploadToFTP(OUTPUT_FILE, FTP_CONFIG);
+        try {
+            await fs.promises.access(OUTPUT_FILE).then(() => {
+                console.log('📤 Загрузка на FTP...');
+            });
+            const { uploadToFTP } = require('./ftp-upload.js');
+            await uploadToFTP(OUTPUT_FILE, FTP_CONFIG);
 
-        fs.unlinkSync(OUTPUT_FILE);
-        console.log(`🗑 Файл ${OUTPUT_FILE} удалён`);
+            await fs.promises.unlink(OUTPUT_FILE).then(() => {
+                console.log(`🗑 Файл ${OUTPUT_FILE} удалён`);
+            });
+        } catch (e) {
+            if (e.code === 'ENOENT') {
+                console.warn(`⚠️ Файл ${OUTPUT_FILE} не найден — нечего загружать`);
+            }
+        }
+    } catch (err) {
+        console.error('❌ Ошибка при выполнении проверки TG/YT:', err.message);
     }
 }
 

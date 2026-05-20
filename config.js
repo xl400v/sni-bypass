@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.9
- * Date: 19 May 2026
+ * Version: 2.1.0
+ * Date: 20 May 2026
  */
 
 const path = require('path');
@@ -55,6 +55,7 @@ module.exports = {
         '%F0%9F%87%BA%F0%9F%87%B8': 'US',
         '%F0%9F%87%A6%F0%9F%87%B9': 'AT',
         '%F0%9F%87%AA%F0%9F%87%AA': 'EE',
-        '%F0%9F%87%B8%F0%9F%87%AA': 'SE'
+        '%F0%9F%87%B8%F0%9F%87%AA': 'SE',
+        '%F0%9F%87%A8%F0%9F%87%B7': 'CZ'
     }
 };

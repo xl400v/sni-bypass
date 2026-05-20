@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.8
+ * Version: 2.0.9
  * Date: 19 May 2026
  */
 
@@ -24,7 +24,7 @@ module.exports = {
 
     XRAY_PATH: path.join(__dirname, 'node_modules', '.bin', isWindows ? 'xray.exe' : 'xray'),
     TEMP_CONFIG_PATH: 'temp-xray-config.json',
-    CHECK_DELAY_MS: 1200,
+    CHECK_DELAY_MS: 2000,
 
     CSV_HEADER: [
         { id: 'lastCheck', title: 'lastCheck' },

@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.8
+ * Version: 2.0.9
  * Date: 19 May 2026
  */
 
@@ -167,10 +167,15 @@ async function main() {
     console.log(`   Новых: ${newCount}`);
     console.log(`   Обновлено: ${updatedCount}`);
 
+    // === Проверка TG/YT ===
     if (verifyMode) {
         console.log('\n🔄 Запуск проверки TG и YouTube...');
-        const { verifyAccess } = require('./verify-access.js');
-        await verifyAccess();
+        try {
+            const { verifyAccess } = require('./verify-access.js');
+            verifyAccess(db);   // Передаём уже загруженную базу
+        } catch (err) {
+            console.error('❌ Ошибка при выполнении проверки TG/YT:', err.message);
+        }
     }
 
     const { createBestServFile } = require('./create-best-serv.js');

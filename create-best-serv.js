@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.8
+ * Version: 2.0.9
  * Date: 19 May 2026
  */
 
@@ -34,12 +34,18 @@ async function createBestServFile(db, outputFile, today, timeForFooter) {
         const remarkLower = (record.subscription || '').toLowerCase();
         const hasLow = /\b(vpn|xhttp)\b/i.test(remarkLower);
 
-        if (record.country === 'RU') {
+        // Новый приоритет для RU: RU + CIDR=1 + tg>0
+        if (record.country === 'RU' && record.cidr == 1 && parseInt(record.tg || 0) > 0) {
             record.priority = !ruFound ? 1 : 4;
             if (!ruFound) ruFound = true;
-        } else if (record.country !== 'EU') {
+        } 
+        else if (record.country === 'RU') {
+            record.priority = 4; // обычные RU
+        } 
+        else if (record.country !== 'EU') {
             record.priority = hasLow ? 5 : 2;
-        } else {
+        } 
+        else {
             record.priority = hasLow ? 5 : 3;
         }
     }

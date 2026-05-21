@@ -26,10 +26,9 @@ const {
 function extractHostPort(subscription) {
     try {
         const urlPart = subscription.split('#')[0];
-        const atIndex = urlPart.indexOf('@');
-        const questionIndex = urlPart.indexOf('?');
-        if (atIndex === -1 || questionIndex === -1) return 'unknown';
-        return urlPart.substring(atIndex + 1, questionIndex);
+        // Ищем @host:port? где host — буквы/цифры/точки, port — цифры
+        const match = urlPart.match(/@([a-zA-Z0-9.-]+:\d+)/);
+        return match[1];
     } catch (e) {
         return 'unknown';
     }

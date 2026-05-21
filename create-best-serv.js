@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.2.1
+ * Version: 2.2.3
  * Date: 21 May 2026
  */
 
@@ -14,10 +14,9 @@ const header = `#profile-title: 🧢 Free Rnd Serv\n` +
 function extractHostPortFromSubscription(subscription) {
     try {
         const urlPart = subscription.split('#')[0];
-        const atIndex = urlPart.indexOf('@');
-        const questionIndex = urlPart.indexOf('?');
-        if (atIndex === -1 || questionIndex === -1) return null;
-        return urlPart.substring(atIndex + 1, questionIndex);
+        // Ищем @host:port? где host — буквы/цифры/точки, port — цифры
+        const match = urlPart.match(/@([a-zA-Z0-9.-]+:\d+)/);
+        return match[1];
     } catch (e) {
         return null;
     }
@@ -36,7 +35,7 @@ async function createBestServFile(db, outputFile, today) {
 
     for (const record of tempList) {
         const remarkLower = (record.subscription || '').toLowerCase();
-        const hasLow = /\b(vpn|xhttp|hysteria)\b/i.test(remarkLower);
+        const hasLow = /\b(hysteria|vpn|xhttp)\b/i.test(remarkLower);
 
         // Приоритет на основе tg (основной показатель качества)
         if (record.country === 'RU' && !hasLow) {

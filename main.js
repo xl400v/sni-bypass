@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.2.2
+ * Version: 2.2.3
  * Date: 21 May 2026
  */
 
@@ -21,7 +21,7 @@ const {
 } = config;
 
 function extractQuic(line) {
-    const match = line.match(/(?<=\/)[^\/@]+(?=@)/);
+    const match = line.match(/(?<=\/\/)[^/@]+(?=@)/);
     return match ? match[0] : null;
 }
 

@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.2.0
+ * Version: 2.2.1
  * Date: 21 May 2026
  */
 
@@ -17,8 +17,7 @@ const {
     FTP_CONFIG,
     COUNTRY_FLAGS,
     INITIAL_RATING,
-    CSV_HEADER,
-    CHECK_SITES
+    CSV_HEADER
 } = config;
 
 function extractHostPort(subscription) {
@@ -73,7 +72,7 @@ function parseSubscription(line) {
 
         return {
             subscription: line.trim(),
-            hostPort: `${host}:${port}`,           // для дедубликации
+            hostPort: `${host}:${port}`,
             protocol: protoType,
             country: getCountry(remark),
             tg: 0,
@@ -86,7 +85,7 @@ function parseSubscription(line) {
     }
 }
 
-// ====================== БАЗА ======================
+// ====================== DATABASE ======================
 
 async function loadDatabase() {
     if (!fs.existsSync(DB_FILE)) {
@@ -140,7 +139,7 @@ async function main() {
     console.log(`✅ Отфильтровано серверов: ${subscriptions.length}`);
 
     let db = await loadDatabase();
-    const dbMap = new Map(); // ключ = host:port
+    const dbMap = new Map();
 
     db.forEach(record => {
         const hp = extractHostPort(record.subscription);
@@ -148,7 +147,6 @@ async function main() {
     });
 
     let newCount = 0, updatedCount = 0;
-
     const now = new Date();
     const today = now.toISOString().split('T')[0];
 
@@ -156,11 +154,12 @@ async function main() {
         if (!sub.quic) continue;
 
         const hp = sub.hostPort;
-        const existingRating = dbMap.has(hp) ? dbMap.get(hp).rating : null;
+        const existing = dbMap.get(hp);
+        const ratingToKeep = existing ? existing.rating : String(INITIAL_RATING);
 
         const record = {
             lastCheck: today,
-            rating: existingRating || String(INITIAL_RATING),
+            rating: ratingToKeep,
             protocol: sub.protocol,
             country: sub.country,
             tg: "0",
@@ -172,7 +171,7 @@ async function main() {
 
         dbMap.set(hp, record);
 
-        if (existingRating) updatedCount++;
+        if (existing) updatedCount++;
         else newCount++;
     }
 
@@ -181,12 +180,12 @@ async function main() {
 
     console.log(`\n📊 Итоги обработки:`);
     console.log(`   Новых: ${newCount}`);
-    console.log(`   Обновлено (с сохранением рейтинга): ${updatedCount}`);
+    console.log(`   Обновлено (рейтинг сохранён): ${updatedCount}`);
 
     if (verifyMode) {
         try {
             const { verifyAccess } = require('./verify-access.js');
-            await verifyAccess(db, today);   // вызываем как модуль (без standalone-режима)
+            await verifyAccess(db, today);
         } catch (e) {
             console.error('❌ Ошибка при выполнении проверки:', e.message);
         }
@@ -196,19 +195,13 @@ async function main() {
         const { createBestServFile } = require('./create-best-serv.js');
         await createBestServFile(db, OUTPUT_FILE, today);
 
-        // ... (FTP часть без изменений)
-        try {
-            await fs.promises.access(OUTPUT_FILE);
+        if (fs.existsSync(OUTPUT_FILE)) {
             console.log('📤 Загрузка на FTP...');
             const { uploadToFTP } = require('./ftp-upload.js');
             await uploadToFTP(OUTPUT_FILE, FTP_CONFIG);
 
             await fs.promises.unlink(OUTPUT_FILE);
             console.log(`🗑 Файл ${OUTPUT_FILE} удалён`);
-        } catch (e) {
-            if (e.code === 'ENOENT') {
-                console.warn(`⚠️ Файл ${OUTPUT_FILE} не найден`);
-            }
         }
     } catch (err) {
         console.error('❌ Ошибка при создании best-serv или загрузке:', err.message);

@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.2.0
+ * Version: 2.2.1
  * Date: 21 May 2026
  * 
  * Запуск: npm run check   или   node verify-access.js
@@ -145,6 +145,14 @@ async function loadDatabase() {
 }
 
 async function saveDatabase(records) {
+    // Сортировка по lastCheck DESC + rating DESC
+    records.sort((a, b) => {
+        if (a.lastCheck !== b.lastCheck) {
+            return b.lastCheck.localeCompare(a.lastCheck);
+        }
+        return parseInt(b.rating) - parseInt(a.rating);
+    });
+
     const writer = createObjectCsvWriter({ path: DB_FILE, header: CSV_HEADER });
     await writer.writeRecords(records);
 }
@@ -208,9 +216,9 @@ async function verifyAccess(db, today, isStandalone = false) {
     }
 
     if (toCheck.length > 0) {
-        await saveDatabase(db);
+        await saveDatabase(db);  // здесь происходит сортировка + сохранение
         try { await fs.promises.unlink(TEMP_CONFIG_PATH).catch(() => {}); } catch (e) {}
-        console.log(`\n✅ Проверка завершена.`);
+        console.log(`\n✅ Проверка завершена и база отсортирована.`);
     } else {
         console.log(`\nℹ️ Нет записей для проверки.`);
     }

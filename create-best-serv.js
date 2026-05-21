@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.2.0
+ * Version: 2.2.1
  * Date: 21 May 2026
  */
 
@@ -24,8 +24,12 @@ function extractHostPortFromSubscription(subscription) {
 }
 
 async function createBestServFile(db, outputFile, today) {
-    if (!db || db.length === 0) return;
+    if (!db || db.length === 0) {
+        console.log('⚠️ Нет данных для создания best-serv.txt');
+        return;
+    }
 
+    // Создаём временный массив с priority (не сохраняется в базу!)
     let tempList = db.map(record => ({ ...record, priority: 3 }));
 
     let ruFound = false;
@@ -35,19 +39,18 @@ async function createBestServFile(db, outputFile, today) {
         const hasLow = /\b(vpn|xhttp|hysteria)\b/i.test(remarkLower);
 
         // Приоритет на основе tg (основной показатель качества)
+        if (record.country === 'RU' && !hasLow) {
+            record.priority = ruFound ? 4 : 1;
+        }
+        else if (record.country === 'EU') {
+            record.priority = hasLow ? 5 : 3;
+        }
+        if (parseInt(record.yt || 0) > 0) record.priority--;
+        if (parseInt(record.tg || 0) > 0) record.priority--;
+        // Гарантируем, что priority > 0
+        if (record.priority < 1) record.priority = 1;
 
-            if (record.country === 'RU' && !hasLow) {
-                record.priority = ruFound ? 4 : 1;
-            }
-            else if (record.country === 'EU') {
-                record.priority = hasLow ? 5 : 3;
-            }
-            if (parseInt(record.yt || 0) > 0) record.priority--;
-            if (parseInt(record.tg || 0) > 0) record.priority--;
-            // Гарантируем, что priority > 0
-            if (record.priority < 1) record.priority = 1;
-
-            if (!ruFound && record.priority === 1) ruFound = true;
+        if (!ruFound && record.priority === 1) ruFound = true;
     }
 
     // Дедубликация по host:port
@@ -62,6 +65,7 @@ async function createBestServFile(db, outputFile, today) {
     }
 
     finalList.sort((a, b) => a.priority - b.priority);
+
     const best = finalList.slice(0, 4);
 
     const timeForFooter = new Date().toISOString().slice(0, 16).replace('T', ' ');

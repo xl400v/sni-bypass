@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.2.1
+ * Version: 2.2.2
  * Date: 21 May 2026
  */
 
@@ -19,18 +19,6 @@ const {
     INITIAL_RATING,
     CSV_HEADER
 } = config;
-
-function extractHostPort(subscription) {
-    try {
-        const urlPart = subscription.split('#')[0];
-        const atIndex = urlPart.indexOf('@');
-        const questionIndex = urlPart.indexOf('?');
-        if (atIndex === -1 || questionIndex === -1) return null;
-        return urlPart.substring(atIndex + 1, questionIndex);
-    } catch (e) {
-        return null;
-    }
-}
 
 function extractQuic(line) {
     const match = line.match(/(?<=\/)[^\/@]+(?=@)/);
@@ -53,11 +41,9 @@ function parseSubscription(line) {
         const url = new URL(urlPart);
 
         const protocolRaw = url.protocol.replace(':', '').toUpperCase();
-        const host = url.hostname;
-        const port = parseInt(url.port) || 443;
         const type = url.searchParams.get('type') || '';
         const security = url.searchParams.get('security') || '';
-        const sni = url.searchParams.get('sni') || host;
+        const sni = url.searchParams.get('sni') || url.hostname;
 
         let protoType = '';
         if (protocolRaw === 'HYSTERIA2') protoType = 'HYSTERIA2+TLS';
@@ -72,12 +58,8 @@ function parseSubscription(line) {
 
         return {
             subscription: line.trim(),
-            hostPort: `${host}:${port}`,
             protocol: protoType,
             country: getCountry(remark),
-            tg: 0,
-            vkvideo: 0,
-            yt: 0,
             quic: extractQuic(line)
         };
     } catch (e) {
@@ -107,7 +89,8 @@ async function loadDatabase() {
 async function saveDatabase(records) {
     records.sort((a, b) => {
         if (a.lastCheck !== b.lastCheck) return b.lastCheck.localeCompare(a.lastCheck);
-        return parseInt(b.rating) - parseInt(a.rating);
+        if (parseInt(b.rating) !== parseInt(a.rating)) return parseInt(b.rating) - parseInt(a.rating);
+        return parseInt(a.vkvideo || 9999) - parseInt(b.vkvideo || 9999);
     });
 
     const writer = createObjectCsvWriter({ path: DB_FILE, header: CSV_HEADER });
@@ -135,44 +118,43 @@ async function main() {
         process.exit(1);
     }
 
-    const subscriptions = text.split('\n').map(parseSubscription).filter(Boolean);
-    console.log(`✅ Отфильтровано серверов: ${subscriptions.length}`);
+    const newSubscriptions = text.split('\n').map(parseSubscription).filter(Boolean);
+    console.log(`✅ Отфильтровано серверов из источника: ${newSubscriptions.length}`);
 
     let db = await loadDatabase();
-    const dbMap = new Map();
-
-    db.forEach(record => {
-        const hp = extractHostPort(record.subscription);
-        if (hp) dbMap.set(hp, record);
-    });
+    const dbMap = new Map(db.map(record => [record.quic, record])); // ключ — quic
 
     let newCount = 0, updatedCount = 0;
     const now = new Date();
     const today = now.toISOString().split('T')[0];
 
-    for (const sub of subscriptions) {
+    for (const sub of newSubscriptions) {
         if (!sub.quic) continue;
 
-        const hp = sub.hostPort;
-        const existing = dbMap.get(hp);
-        const ratingToKeep = existing ? existing.rating : String(INITIAL_RATING);
+        const existing = dbMap.get(sub.quic);
 
-        const record = {
-            lastCheck: today,
-            rating: ratingToKeep,
-            protocol: sub.protocol,
-            country: sub.country,
-            tg: "0",
-            vkvideo: "0",
-            yt: "0",
-            quic: sub.quic,
-            subscription: sub.subscription
-        };
-
-        dbMap.set(hp, record);
-
-        if (existing) updatedCount++;
-        else newCount++;
+        if (existing) {
+            // Обновляем данные из источника, сохраняем rating и результаты проверок
+            existing.lastCheck = today;
+            existing.subscription = sub.subscription;
+            existing.protocol = sub.protocol;
+            existing.country = sub.country;
+            updatedCount++;
+        } else {
+            // Новая запись
+            dbMap.set(sub.quic, {
+                lastCheck: today,
+                rating: String(INITIAL_RATING),
+                protocol: sub.protocol,
+                country: sub.country,
+                tg: "0",
+                vkvideo: "0",
+                yt: "0",
+                quic: sub.quic,
+                subscription: sub.subscription
+            });
+            newCount++;
+        }
     }
 
     db = Array.from(dbMap.values());
@@ -180,7 +162,8 @@ async function main() {
 
     console.log(`\n📊 Итоги обработки:`);
     console.log(`   Новых: ${newCount}`);
-    console.log(`   Обновлено (рейтинг сохранён): ${updatedCount}`);
+    console.log(`   Обновлено: ${updatedCount}`);
+    console.log(`   Всего в базе: ${db.length}`);
 
     if (verifyMode) {
         try {

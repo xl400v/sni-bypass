@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.2.1
+ * Version: 2.2.2
  * Date: 21 May 2026
  * 
  * Запуск: npm run check   или   node verify-access.js
@@ -145,12 +145,10 @@ async function loadDatabase() {
 }
 
 async function saveDatabase(records) {
-    // Сортировка по lastCheck DESC + rating DESC
     records.sort((a, b) => {
-        if (a.lastCheck !== b.lastCheck) {
-            return b.lastCheck.localeCompare(a.lastCheck);
-        }
-        return parseInt(b.rating) - parseInt(a.rating);
+        if (a.lastCheck !== b.lastCheck) return b.lastCheck.localeCompare(a.lastCheck);
+        if (parseInt(b.rating) !== parseInt(a.rating)) return parseInt(b.rating) - parseInt(a.rating);
+        return parseInt(a.vkvideo || 9999) - parseInt(b.vkvideo || 9999); // vkvideo по возрастанию (меньше = лучше)
     });
 
     const writer = createObjectCsvWriter({ path: DB_FILE, header: CSV_HEADER });
@@ -176,7 +174,6 @@ async function verifyAccess(db, today, isStandalone = false) {
         const hostPort = extractHostPort(record.subscription);
         console.log(`Проверка → ${record.country.padEnd(4)} | ${hostPort}`);
 
-        // telegram.org
         const tgResult = await checkSite(record.subscription, 'telegram.org');
         if (tgResult.success) {
             record.tg = String(tgResult.latency);
@@ -188,7 +185,6 @@ async function verifyAccess(db, today, isStandalone = false) {
             console.log(`   ❌ telegram.org → недоступен`);
         }
 
-        // vkvideo.ru
         const vkResult = await checkSite(record.subscription, 'vkvideo.ru');
         if (vkResult.success) {
             record.vkvideo = String(vkResult.latency);
@@ -200,7 +196,6 @@ async function verifyAccess(db, today, isStandalone = false) {
             console.log(`   ❌ vkvideo.ru → недоступен`);
         }
 
-        // youtube.com
         const ytResult = await checkSite(record.subscription, 'youtube.com');
         if (ytResult.success) {
             record.yt = String(ytResult.latency);
@@ -216,7 +211,7 @@ async function verifyAccess(db, today, isStandalone = false) {
     }
 
     if (toCheck.length > 0) {
-        await saveDatabase(db);  // здесь происходит сортировка + сохранение
+        await saveDatabase(db);
         try { await fs.promises.unlink(TEMP_CONFIG_PATH).catch(() => {}); } catch (e) {}
         console.log(`\n✅ Проверка завершена и база отсортирована.`);
     } else {

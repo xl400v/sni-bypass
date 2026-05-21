@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.1.2
+ * Version: 2.1.3
  * Date: 21 May 2026
  */
 
@@ -104,7 +104,7 @@ async function checkSite(subscription, site) {
             try {
                 const { execSync } = require('child_process');
                 const output = execSync(
-                    `curl -I -s --socks5 127.0.0.1:1080 --max-time 7 https://${site}`, 
+                    `curl -I -s --socks5 127.0.0.1:1080 --max-time 7 https://${site}`,
                     { timeout: CHECK_DELAY_MS * 4 }
                 ).toString();
 
@@ -185,25 +185,24 @@ async function verifyAccess(db, today) {
 
     if (toCheck.length > 0) {
         await saveDatabase(db);
-        try { await fs.promises.unlink(TEMP_CONFIG_PATH); } catch (e) {}
+        try { await fs.promises.unlink(TEMP_CONFIG_PATH).catch(() => {}); } catch (e) {}
         console.log(`\n✅ Проверка завершена.`);
     } else {
         console.log(`\nℹ️ Нет записей для проверки сегодня.`);
     }
 }
 
-// ====================== STANDALONE EXECUTION ======================
+// ====================== STANDALONE / MODULE ======================
 
 if (require.main === module) {
     (async () => {
-        console.log('🚀 Запуск verify-access.js в standalone режиме...\n');
+        console.log('🚀 verify-access.js запущен в самостоятельном режиме\n');
         try {
             const db = await loadDatabase();
             const today = new Date().toISOString().split('T')[0];
-            
             await verifyAccess(db, today);
         } catch (err) {
-            console.error('💥 Критическая ошибка:', err.message);
+            console.error('💥 Ошибка:', err.message);
             process.exit(1);
         }
     })();

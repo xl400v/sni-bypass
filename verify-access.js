@@ -1,11 +1,10 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.1.0
+ * Version: 2.1.1
  * Date: 20 May 2026
  */
 
 const fs = require('fs');
-const { spawn } = require('child_process');
 const { createObjectCsvWriter } = require('csv-writer');
 const csvParser = require('csv-parser');
 const config = require('./config');
@@ -15,7 +14,8 @@ const {
     XRAY_PATH, 
     TEMP_CONFIG_PATH, 
     INITIAL_RATING, 
-    CHECK_DELAY_MS 
+    CHECK_DELAY_MS,
+    CSV_HEADER
 } = config;
 
 function extractHostPort(subscription) {
@@ -117,11 +117,33 @@ async function checkSite(subscription, site) {
                 proc.kill();
                 resolve({ success: 0, latency: 0 });
             }
-        }, CHECK_DELAY_MS); // время на запуск Xray
+        }, CHECK_DELAY_MS);
     });
 }
 
 // ====================== MAIN ======================
+
+async function loadDatabase() {
+    if (!fs.existsSync(DB_FILE)) {
+        const writer = createObjectCsvWriter({ path: DB_FILE, header: CSV_HEADER });
+        await writer.writeRecords([]);
+        return [];
+    }
+
+    return new Promise((resolve, reject) => {
+        const records = [];
+        fs.createReadStream(DB_FILE)
+            .pipe(csvParser())
+            .on('data', data => records.push(data))
+            .on('end', () => resolve(records))
+            .on('error', reject);
+    });
+}
+
+async function saveDatabase(records) {
+    const writer = createObjectCsvWriter({ path: DB_FILE, header: CSV_HEADER });
+    await writer.writeRecords(records);
+}
 
 async function verifyAccess(db, today) {
     console.log('🚀 Запуск проверки telegram.org и youtube.com...\n');
@@ -146,6 +168,7 @@ async function verifyAccess(db, today) {
                 console.log(`   ❌ telegram.org → недоступен`);
             }
         });
+
         // Проверка youtube.com
         await checkSite(record.subscription, 'youtube.com').then(ytResult => {
             if (ytResult.success) {
@@ -158,21 +181,38 @@ async function verifyAccess(db, today) {
                 console.log(`   ❌ youtube.com → недоступен`);
             }
         });
+
         await new Promise(r => setTimeout(r, CHECK_DELAY_MS));
     }
+
     if (toCheck.length > 0) {
-        await saveDatabase(db).then(() => {
-            if (fs.promises.access(TEMP_CONFIG_PATH)) fs.promises.unlink(TEMP_CONFIG_PATH);
-            console.log(`\n✅ Проверка "verifyAccess" завершена.`);
-        });
+        await saveDatabase(db);
+        try {
+            await fs.promises.unlink(TEMP_CONFIG_PATH);
+        } catch (e) {
+            // ignore if not exists
+        }
+        console.log(`\n✅ Проверка "verifyAccess" завершена.`);
     }
 }
 
-async function saveDatabase(records) {
-    const writer = createObjectCsvWriter({ path: DB_FILE, header: config.CSV_HEADER });
-    await writer.writeRecords(records);
+// ====================== STANDALONE / MODULE ======================
+
+// Для запуска как самостоятельный скрипт
+if (require.main === module) {
+    (async () => {
+        try {
+            const db = await loadDatabase();
+            const now = new Date();
+            const today = now.toISOString().split('T')[0];
+            
+            await verifyAccess(db, today);
+        } catch (err) {
+            console.error('💥 Ошибка при самостоятельном запуске verify-access:', err.message);
+            process.exit(1);
+        }
+    })();
+} else {
+    // Для импорта как модуля
+    module.exports = { verifyAccess };
 }
-
-verifyAccess = verifyAccess; // для модуля
-
-module.exports = { verifyAccess };

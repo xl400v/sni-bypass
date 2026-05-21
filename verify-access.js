@@ -1,10 +1,11 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.1.1
- * Date: 20 May 2026
+ * Version: 2.1.2
+ * Date: 21 May 2026
  */
 
 const fs = require('fs');
+const { spawn } = require('child_process');
 const { createObjectCsvWriter } = require('csv-writer');
 const csvParser = require('csv-parser');
 const config = require('./config');
@@ -86,7 +87,6 @@ function createXrayConfig(parsed) {
     };
 }
 
-/** Реальная проверка через Xray */
 async function checkSite(subscription, site) {
     const parsed = parseVlessSubscription(subscription);
     if (!parsed) return { success: 0, latency: 0 };
@@ -121,7 +121,7 @@ async function checkSite(subscription, site) {
     });
 }
 
-// ====================== MAIN ======================
+// ====================== DATABASE ======================
 
 async function loadDatabase() {
     if (!fs.existsSync(DB_FILE)) {
@@ -145,6 +145,8 @@ async function saveDatabase(records) {
     await writer.writeRecords(records);
 }
 
+// ====================== MAIN LOGIC ======================
+
 async function verifyAccess(db, today) {
     console.log('🚀 Запуск проверки telegram.org и youtube.com...\n');
 
@@ -156,63 +158,55 @@ async function verifyAccess(db, today) {
         const hostPort = extractHostPort(record.subscription);
         console.log(`Проверка → ${record.country.padEnd(4)} | ${hostPort}`);
 
-        // Проверка t.me
-        await checkSite(record.subscription, 'telegram.org').then(tgResult => {
-            if (tgResult.success) {
-                record.tg = String(tgResult.latency);
-                record.rating = String(parseInt(record.rating) + 10);
-                console.log(`   ✅ telegram.org → ${tgResult.latency} ms`);
-            } else {
-                record.tg = "0";
-                record.rating = String(parseInt(record.rating) - 5);
-                console.log(`   ❌ telegram.org → недоступен`);
-            }
-        });
+        const tgResult = await checkSite(record.subscription, 'telegram.org');
+        if (tgResult.success) {
+            record.tg = String(tgResult.latency);
+            record.rating = String(parseInt(record.rating) + 10);
+            console.log(`   ✅ telegram.org → ${tgResult.latency} ms`);
+        } else {
+            record.tg = "0";
+            record.rating = String(parseInt(record.rating) - 5);
+            console.log(`   ❌ telegram.org → недоступен`);
+        }
 
-        // Проверка youtube.com
-        await checkSite(record.subscription, 'youtube.com').then(ytResult => {
-            if (ytResult.success) {
-                record.yt = String(ytResult.latency);
-                record.rating = String(parseInt(record.rating) + 10);
-                console.log(`   ✅ youtube.com → ${ytResult.latency} ms`);
-            } else {
-                record.yt = "0";
-                record.rating = String(parseInt(record.rating) - 5);
-                console.log(`   ❌ youtube.com → недоступен`);
-            }
-        });
+        const ytResult = await checkSite(record.subscription, 'youtube.com');
+        if (ytResult.success) {
+            record.yt = String(ytResult.latency);
+            record.rating = String(parseInt(record.rating) + 10);
+            console.log(`   ✅ youtube.com → ${ytResult.latency} ms`);
+        } else {
+            record.yt = "0";
+            record.rating = String(parseInt(record.rating) - 5);
+            console.log(`   ❌ youtube.com → недоступен`);
+        }
 
         await new Promise(r => setTimeout(r, CHECK_DELAY_MS));
     }
 
     if (toCheck.length > 0) {
         await saveDatabase(db);
-        try {
-            await fs.promises.unlink(TEMP_CONFIG_PATH);
-        } catch (e) {
-            // ignore if not exists
-        }
-        console.log(`\n✅ Проверка "verifyAccess" завершена.`);
+        try { await fs.promises.unlink(TEMP_CONFIG_PATH); } catch (e) {}
+        console.log(`\n✅ Проверка завершена.`);
+    } else {
+        console.log(`\nℹ️ Нет записей для проверки сегодня.`);
     }
 }
 
-// ====================== STANDALONE / MODULE ======================
+// ====================== STANDALONE EXECUTION ======================
 
-// Для запуска как самостоятельный скрипт
 if (require.main === module) {
     (async () => {
+        console.log('🚀 Запуск verify-access.js в standalone режиме...\n');
         try {
             const db = await loadDatabase();
-            const now = new Date();
-            const today = now.toISOString().split('T')[0];
+            const today = new Date().toISOString().split('T')[0];
             
             await verifyAccess(db, today);
         } catch (err) {
-            console.error('💥 Ошибка при самостоятельном запуске verify-access:', err.message);
+            console.error('💥 Критическая ошибка:', err.message);
             process.exit(1);
         }
     })();
 } else {
-    // Для импорта как модуля
     module.exports = { verifyAccess };
 }

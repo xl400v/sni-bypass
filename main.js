@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.1.5
+ * Version: 2.2.0
  * Date: 21 May 2026
  */
 
@@ -21,7 +21,17 @@ const {
     CHECK_SITES
 } = config;
 
-// ====================== УТИЛИТЫ ======================
+function extractHostPort(subscription) {
+    try {
+        const urlPart = subscription.split('#')[0];
+        const atIndex = urlPart.indexOf('@');
+        const questionIndex = urlPart.indexOf('?');
+        if (atIndex === -1 || questionIndex === -1) return null;
+        return urlPart.substring(atIndex + 1, questionIndex);
+    } catch (e) {
+        return null;
+    }
+}
 
 function extractQuic(line) {
     const match = line.match(/(?<=\/)[^\/@]+(?=@)/);
@@ -63,11 +73,9 @@ function parseSubscription(line) {
 
         return {
             subscription: line.trim(),
-            host,
-            port,
+            hostPort: `${host}:${port}`,           // для дедубликации
             protocol: protoType,
             country: getCountry(remark),
-            cidr: remark.includes('CIDR') ? 1 : 0,
             tg: 0,
             vkvideo: 0,
             yt: 0,
@@ -132,7 +140,12 @@ async function main() {
     console.log(`✅ Отфильтровано серверов: ${subscriptions.length}`);
 
     let db = await loadDatabase();
-    const dbMap = new Map(db.map(r => [r.quic, r]));
+    const dbMap = new Map(); // ключ = host:port
+
+    db.forEach(record => {
+        const hp = extractHostPort(record.subscription);
+        if (hp) dbMap.set(hp, record);
+    });
 
     let newCount = 0, updatedCount = 0;
 
@@ -142,29 +155,25 @@ async function main() {
     for (const sub of subscriptions) {
         if (!sub.quic) continue;
 
-        if (!dbMap.has(sub.quic)) {
-            dbMap.set(sub.quic, {
-                lastCheck: today,
-                rating: String(INITIAL_RATING),
-                protocol: sub.protocol,
-                country: sub.country,
-                cidr: sub.cidr,
-                tg: 0,
-                vkvideo: 0,
-                yt: 0,
-                quic: sub.quic,
-                subscription: sub.subscription
-            });
-            newCount++;
-        } else {
-            const existing = dbMap.get(sub.quic);
-            existing.lastCheck = today;
-            // Обнуляем результаты проверок при обновлении
-            existing.tg = "0";
-            existing.vkvideo = "0";
-            existing.yt = "0";
-            updatedCount++;
-        }
+        const hp = sub.hostPort;
+        const existingRating = dbMap.has(hp) ? dbMap.get(hp).rating : null;
+
+        const record = {
+            lastCheck: today,
+            rating: existingRating || String(INITIAL_RATING),
+            protocol: sub.protocol,
+            country: sub.country,
+            tg: "0",
+            vkvideo: "0",
+            yt: "0",
+            quic: sub.quic,
+            subscription: sub.subscription
+        };
+
+        dbMap.set(hp, record);
+
+        if (existingRating) updatedCount++;
+        else newCount++;
     }
 
     db = Array.from(dbMap.values());
@@ -172,7 +181,7 @@ async function main() {
 
     console.log(`\n📊 Итоги обработки:`);
     console.log(`   Новых: ${newCount}`);
-    console.log(`   Обновлено: ${updatedCount}`);
+    console.log(`   Обновлено (с сохранением рейтинга): ${updatedCount}`);
 
     if (verifyMode) {
         try {

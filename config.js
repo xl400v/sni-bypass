@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.1.5
+ * Version: 2.2.0
  * Date: 21 May 2026
  */
 
@@ -26,11 +26,10 @@ module.exports = {
     TEMP_CONFIG_PATH: 'temp-xray-config.json',
     CHECK_DELAY_MS: 2000,
 
-    // === Новые централизованные настройки проверок ===
     CHECK_SITES: [
-        { field: 'tg',       url: 'telegram.org',  name: 'telegram.org' },
-        { field: 'vkvideo',  url: 'vkvideo.ru',    name: 'vkvideo.ru' },
-        { field: 'yt',       url: 'youtube.com',   name: 'youtube.com' }
+        { field: 'tg',      url: 'telegram.org', name: 'telegram.org' },
+        { field: 'vkvideo', url: 'vkvideo.ru',   name: 'vkvideo.ru' },
+        { field: 'yt',      url: 'youtube.com',  name: 'youtube.com' }
     ],
 
     CSV_HEADER: [
@@ -38,7 +37,6 @@ module.exports = {
         { id: 'rating', title: 'rating' },
         { id: 'protocol', title: 'protocol' },
         { id: 'country', title: 'country' },
-        { id: 'cidr', title: 'cidr' },
         { id: 'tg', title: 'tg' },
         { id: 'vkvideo', title: 'vkvideo' },
         { id: 'yt', title: 'yt' },

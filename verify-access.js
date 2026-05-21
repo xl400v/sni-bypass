@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.1.5
+ * Version: 2.2.0
  * Date: 21 May 2026
  * 
  * Запуск: npm run check   или   node verify-access.js
@@ -156,11 +156,9 @@ async function verifyAccess(db, today, isStandalone = false) {
 
     let toCheck;
     if (isStandalone) {
-        // При самостоятельном запуске проверяем все записи с рейтингом INITIAL_RATING
         toCheck = db.filter(r => parseInt(r.rating) === INITIAL_RATING);
         console.log('⚙️ Режим самостоятельного запуска — проверяются все записи с рейтингом 70\n');
     } else {
-        // При вызове из main.js — только сегодняшние
         toCheck = db.filter(r => r.lastCheck === today && parseInt(r.rating) === INITIAL_RATING);
     }
 
@@ -182,7 +180,7 @@ async function verifyAccess(db, today, isStandalone = false) {
             console.log(`   ❌ telegram.org → недоступен`);
         }
 
-        // vkvideo.ru (новая проверка)
+        // vkvideo.ru
         const vkResult = await checkSite(record.subscription, 'vkvideo.ru');
         if (vkResult.success) {
             record.vkvideo = String(vkResult.latency);
@@ -221,19 +219,17 @@ async function verifyAccess(db, today, isStandalone = false) {
 // ====================== EXECUTION ======================
 
 if (require.main === module) {
-    // Самостоятельный запуск
     (async () => {
         console.log('🚀 verify-access.js запущен в standalone режиме\n');
         try {
             const db = await loadDatabase();
             const today = new Date().toISOString().split('T')[0];
-            await verifyAccess(db, today, true);   // isStandalone = true
+            await verifyAccess(db, today, true);
         } catch (err) {
             console.error('💥 Ошибка:', err.message);
             process.exit(1);
         }
     })();
 } else {
-    // Вызов из main.js
     module.exports = { verifyAccess };
 }

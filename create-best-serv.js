@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.1.0
- * Date: 20 May 2026
+ * Version: 2.2.0
+ * Date: 21 May 2026
  */
 
 const fs = require('fs');
@@ -34,23 +34,23 @@ async function createBestServFile(db, outputFile, today) {
         const remarkLower = (record.subscription || '').toLowerCase();
         const hasLow = /\b(vpn|xhttp|hysteria)\b/i.test(remarkLower);
 
-        // CIDR + tg > 0 = высший приоритет
-        if (record.cidr == 1 && parseInt(record.tg || 0) > 0) {
-            record.priority = 2;
+        // Приоритет на основе tg (основной показатель качества)
 
             if (record.country === 'RU' && !hasLow) {
-                record.priority = !ruFound ? 1 : 4;
-                if (!ruFound) ruFound = true;
+                record.priority = ruFound ? 4 : 1;
             }
-        }
-        else if (record.country !== 'EU') {
-            record.priority = hasLow ? 5 : 2;
-        } 
-        else {
-            record.priority = hasLow ? 5 : 3;
-        }
+            else if (record.country === 'EU') {
+                record.priority = hasLow ? 5 : 3;
+            }
+            if (parseInt(record.yt || 0) > 0) record.priority--;
+            if (parseInt(record.tg || 0) > 0) record.priority--;
+            // Гарантируем, что priority > 0
+            if (record.priority < 1) record.priority = 1;
+
+            if (!ruFound && record.priority === 1) ruFound = true;
     }
 
+    // Дедубликация по host:port
     const seen = new Set();
     const finalList = [];
 

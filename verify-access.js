@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.1.3
+ * Version: 2.1.4
  * Date: 21 May 2026
  */
 
@@ -18,6 +18,8 @@ const {
     CHECK_DELAY_MS,
     CSV_HEADER
 } = config;
+
+// ====================== УТИЛИТЫ ======================
 
 function extractHostPort(subscription) {
     try {
@@ -192,11 +194,12 @@ async function verifyAccess(db, today) {
     }
 }
 
-// ====================== STANDALONE / MODULE ======================
+// ====================== EXECUTION ======================
 
+// Автозапуск при прямом вызове node verify-access.js
 if (require.main === module) {
     (async () => {
-        console.log('🚀 verify-access.js запущен в самостоятельном режиме\n');
+        console.log('🚀 verify-access.js запущен напрямую\n');
         try {
             const db = await loadDatabase();
             const today = new Date().toISOString().split('T')[0];
@@ -206,6 +209,7 @@ if (require.main === module) {
             process.exit(1);
         }
     })();
-} else {
-    module.exports = { verifyAccess };
 }
+
+// Минимальный экспорт для main.js
+module.exports = { verifyAccess };

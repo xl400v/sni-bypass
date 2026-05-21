@@ -1,6 +1,6 @@
 {
   "name": "sni-bypass",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "description": "AI: Show the working code for checking the health of remote servers",
   "main": "main.js",
   "scripts": {

@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.0.3
- * Date: 14 May 2026
+ * Version: 2.2.4
+ * Date: 21 May 2026
  * 
  * Автоматическая загрузка Xray в node_modules/.bin
  * Использование: node download-xray.js [linux|windows]
@@ -11,10 +11,9 @@ const fs = require('fs');
 const https = require('https');
 const path = require('path');
 const { execSync } = require('child_process');
-const config = require('./config');
+const { XRAY_PATH } = require('./config');
 
 const PLATFORM = (process.argv[2] || 'linux').toLowerCase();
-const XRAY_PATH = config.XRAY_PATH;
 const BIN_DIR = path.dirname(XRAY_PATH);
 
 let downloadUrl = '';

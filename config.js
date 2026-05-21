@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.2.0
+ * Version: 2.2.4
  * Date: 21 May 2026
  */
 
@@ -62,6 +62,7 @@ module.exports = {
         '%F0%9F%87%A6%F0%9F%87%B9': 'AT',
         '%F0%9F%87%AA%F0%9F%87%AA': 'EE',
         '%F0%9F%87%B8%F0%9F%87%AA': 'SE',
-        '%F0%9F%87%A8%F0%9F%87%B7': 'CZ'
+        '%F0%9F%87%A8%F0%9F%87%B7': 'CZ',
+        '%F0%9F%87%A7%F0%9F%87%BE': 'BY'
     }
 };

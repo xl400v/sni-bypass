@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.2.2
+ * Version: 2.2.4
  * Date: 21 May 2026
  * 
  * Запуск: npm run check   или   node verify-access.js
@@ -10,29 +10,10 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const { createObjectCsvWriter } = require('csv-writer');
 const csvParser = require('csv-parser');
-const config = require('./config');
-
-const { 
-    DB_FILE, 
-    XRAY_PATH, 
-    TEMP_CONFIG_PATH, 
-    INITIAL_RATING, 
-    CHECK_DELAY_MS,
-    CSV_HEADER
-} = config;
+const { loadDatabase, saveDatabase, extractHostPort } = require('./db-utils');
+const { XRAY_PATH, TEMP_CONFIG_PATH, INITIAL_RATING, CHECK_DELAY_MS } = require('./config');
 
 // ====================== УТИЛИТЫ ======================
-
-function extractHostPort(subscription) {
-    try {
-        const urlPart = subscription.split('#')[0];
-        // Ищем @host:port? где host — буквы/цифры/точки, port — цифры
-        const match = urlPart.match(/@([a-zA-Z0-9.-]+:\d+)/);
-        return match[1];
-    } catch (e) {
-        return 'unknown';
-    }
-}
 
 function parseVlessSubscription(sub) {
     try {
@@ -124,36 +105,6 @@ async function checkSite(subscription, site) {
     });
 }
 
-// ====================== DATABASE ======================
-
-async function loadDatabase() {
-    if (!fs.existsSync(DB_FILE)) {
-        const writer = createObjectCsvWriter({ path: DB_FILE, header: CSV_HEADER });
-        await writer.writeRecords([]);
-        return [];
-    }
-
-    return new Promise((resolve, reject) => {
-        const records = [];
-        fs.createReadStream(DB_FILE)
-            .pipe(csvParser())
-            .on('data', data => records.push(data))
-            .on('end', () => resolve(records))
-            .on('error', reject);
-    });
-}
-
-async function saveDatabase(records) {
-    records.sort((a, b) => {
-        if (a.lastCheck !== b.lastCheck) return b.lastCheck.localeCompare(a.lastCheck);
-        if (parseInt(b.rating) !== parseInt(a.rating)) return parseInt(b.rating) - parseInt(a.rating);
-        return parseInt(a.vkvideo || 9999) - parseInt(b.vkvideo || 9999); // vkvideo по возрастанию (меньше = лучше)
-    });
-
-    const writer = createObjectCsvWriter({ path: DB_FILE, header: CSV_HEADER });
-    await writer.writeRecords(records);
-}
-
 // ====================== MAIN LOGIC ======================
 
 async function verifyAccess(db, today, isStandalone = false) {
@@ -161,60 +112,78 @@ async function verifyAccess(db, today, isStandalone = false) {
 
     let toCheck;
     if (isStandalone) {
-        toCheck = db.filter(r => parseInt(r.rating) === INITIAL_RATING);
-        console.log('⚙️ Режим самостоятельного запуска — проверяются все записи с рейтингом 70\n');
+        toCheck = db.filter(r => r.lastCheck <= today);
+        console.log('⚙️ Режим самостоятельного запуска — записи за прошлые дни\n');
     } else {
         toCheck = db.filter(r => r.lastCheck === today && parseInt(r.rating) === INITIAL_RATING);
+        console.log(`🔎 Найдено записей для проверки: ${toCheck.length}\n`);
     }
 
-    console.log(`Найдено записей для проверки: ${toCheck.length}\n`);
+    const recordsToKeep = [];
 
     for (const record of toCheck) {
         const hostPort = extractHostPort(record.subscription);
         console.log(`Проверка → ${record.country.padEnd(4)} | ${hostPort}`);
 
+        // telegram.org
         const tgResult = await checkSite(record.subscription, 'telegram.org');
         if (tgResult.success) {
             record.tg = String(tgResult.latency);
-            record.rating = String(parseInt(record.rating) + 10);
+            record.rating = String(parseInt(record.rating) + 5);
             console.log(`   ✅ telegram.org → ${tgResult.latency} ms`);
         } else {
             record.tg = "0";
-            record.rating = String(parseInt(record.rating) - 5);
+            record.rating = String(parseInt(record.rating) - 10);
             console.log(`   ❌ telegram.org → недоступен`);
         }
 
+        // vkvideo.ru
         const vkResult = await checkSite(record.subscription, 'vkvideo.ru');
         if (vkResult.success) {
             record.vkvideo = String(vkResult.latency);
-            record.rating = String(parseInt(record.rating) + 10);
+            record.rating = String(parseInt(record.rating) + 5);
             console.log(`   ✅ vkvideo.ru → ${vkResult.latency} ms`);
         } else {
             record.vkvideo = "0";
-            record.rating = String(parseInt(record.rating) - 5);
+            record.rating = String(parseInt(record.rating) - 10);
             console.log(`   ❌ vkvideo.ru → недоступен`);
         }
 
+        // youtube.com
         const ytResult = await checkSite(record.subscription, 'youtube.com');
         if (ytResult.success) {
             record.yt = String(ytResult.latency);
-            record.rating = String(parseInt(record.rating) + 10);
+            record.rating = String(parseInt(record.rating) + 5);
             console.log(`   ✅ youtube.com → ${ytResult.latency} ms`);
         } else {
             record.yt = "0";
-            record.rating = String(parseInt(record.rating) - 5);
+            record.rating = String(parseInt(record.rating) - 10);
             console.log(`   ❌ youtube.com → недоступен`);
+        }
+
+        // Проверка рейтинга после всех тестов
+        if (parseInt(record.rating) >= 0) {
+            recordsToKeep.push(record);
+        } else {
+            console.log(`   🗑 Запись удалена (рейтинг < 0)`);
         }
 
         await new Promise(r => setTimeout(r, CHECK_DELAY_MS));
     }
 
+    // Формируем обновлённый db (оставляем только хорошие + непроверенные сегодня)
+    const checkedQuics = new Set(toCheck.map(r => r.quic));
+    const finalDb = db.filter(record => {
+        if (checkedQuics.has(record.quic)) {
+            return recordsToKeep.some(kept => kept.quic === record.quic);
+        }
+        return true;
+    });
+
     if (toCheck.length > 0) {
-        await saveDatabase(db);
+        await saveDatabase(finalDb);
         try { await fs.promises.unlink(TEMP_CONFIG_PATH).catch(() => {}); } catch (e) {}
-        console.log(`\n✅ Проверка завершена и база отсортирована.`);
-    } else {
-        console.log(`\nℹ️ Нет записей для проверки.`);
+        console.log(`\n✅ Проверка завершена. Удалено записей с отрицательным рейтингом.`);
     }
 }
 

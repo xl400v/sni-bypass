@@ -1,23 +1,20 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.2.3
+ * Version: 2.2.4
  * Date: 21 May 2026
  */
 
 const fs = require('fs');
 const fetch = require('node-fetch');
-const { createObjectCsvWriter } = require('csv-writer');
-const csvParser = require('csv-parser');
+const { loadDatabase, saveDatabase, extractHostPort } = require('./db-utils');
 const config = require('./config');
 
 const { 
     DEFAULT_SUBSCRIPTIONS_URL,
-    DB_FILE, 
     OUTPUT_FILE, 
     FTP_CONFIG,
     COUNTRY_FLAGS,
-    INITIAL_RATING,
-    CSV_HEADER
+    INITIAL_RATING
 } = config;
 
 function extractQuic(line) {
@@ -41,9 +38,11 @@ function parseSubscription(line) {
         const url = new URL(urlPart);
 
         const protocolRaw = url.protocol.replace(':', '').toUpperCase();
+        const host = url.hostname;
+        const port = parseInt(url.port) || 443;
         const type = url.searchParams.get('type') || '';
         const security = url.searchParams.get('security') || '';
-        const sni = url.searchParams.get('sni') || url.hostname;
+        const sni = url.searchParams.get('sni') || '';
 
         let protoType = '';
         if (protocolRaw === 'HYSTERIA2') protoType = 'HYSTERIA2+TLS';
@@ -58,6 +57,7 @@ function parseSubscription(line) {
 
         return {
             subscription: line.trim(),
+            host: `${host}:${port}`,
             protocol: protoType,
             country: getCountry(remark),
             quic: extractQuic(line)
@@ -65,36 +65,6 @@ function parseSubscription(line) {
     } catch (e) {
         return null;
     }
-}
-
-// ====================== DATABASE ======================
-
-async function loadDatabase() {
-    if (!fs.existsSync(DB_FILE)) {
-        const writer = createObjectCsvWriter({ path: DB_FILE, header: CSV_HEADER });
-        await writer.writeRecords([]);
-        return [];
-    }
-
-    return new Promise((resolve, reject) => {
-        const records = [];
-        fs.createReadStream(DB_FILE)
-            .pipe(csvParser())
-            .on('data', data => records.push(data))
-            .on('end', () => resolve(records))
-            .on('error', reject);
-    });
-}
-
-async function saveDatabase(records) {
-    records.sort((a, b) => {
-        if (a.lastCheck !== b.lastCheck) return b.lastCheck.localeCompare(a.lastCheck);
-        if (parseInt(b.rating) !== parseInt(a.rating)) return parseInt(b.rating) - parseInt(a.rating);
-        return parseInt(a.vkvideo || 9999) - parseInt(b.vkvideo || 9999);
-    });
-
-    const writer = createObjectCsvWriter({ path: DB_FILE, header: CSV_HEADER });
-    await writer.writeRecords(records);
 }
 
 // ====================== MAIN ======================
@@ -122,7 +92,13 @@ async function main() {
     console.log(`✅ Отфильтровано серверов из источника: ${newSubscriptions.length}`);
 
     let db = await loadDatabase();
-    const dbMap = new Map(db.map(record => [record.quic, record])); // ключ — quic
+    const dbMap = new Map(); // ключ = host:port
+
+    // Заполняем карту существующими записями
+    db.forEach(record => {
+        const hp = extractHostPort(record.subscription);
+        if (hp) dbMap.set(hp, record);
+    });
 
     let newCount = 0, updatedCount = 0;
     const now = new Date();
@@ -130,31 +106,31 @@ async function main() {
 
     for (const sub of newSubscriptions) {
         if (!sub.quic) continue;
-
-        const existing = dbMap.get(sub.quic);
+        
+        let ratingToKeep = String(INITIAL_RATING);
+        const existing = dbMap.get(sub.host);
 
         if (existing) {
-            // Обновляем данные из источника, сохраняем rating и результаты проверок
-            existing.lastCheck = today;
-            existing.subscription = sub.subscription;
-            existing.protocol = sub.protocol;
-            existing.country = sub.country;
+            // Сначала проверяем по host:port, затем по quic (как требовалось)
+            ratingToKeep = existing.rating;
             updatedCount++;
         } else {
-            // Новая запись
-            dbMap.set(sub.quic, {
-                lastCheck: today,
-                rating: String(INITIAL_RATING),
-                protocol: sub.protocol,
-                country: sub.country,
-                tg: "0",
-                vkvideo: "0",
-                yt: "0",
-                quic: sub.quic,
-                subscription: sub.subscription
-            });
             newCount++;
         }
+
+        const record = {
+            lastCheck: today,
+            rating: ratingToKeep,
+            protocol: sub.protocol,
+            country: sub.country,
+            tg: "0",
+            vkvideo: "0",
+            yt: "0",
+            quic: dbMap.get(sub.host) ? existing.quic : sub.quic,
+            subscription: sub.subscription
+        };
+
+        dbMap.set(sub.host, record);
     }
 
     db = Array.from(dbMap.values());
@@ -162,7 +138,7 @@ async function main() {
 
     console.log(`\n📊 Итоги обработки:`);
     console.log(`   Новых: ${newCount}`);
-    console.log(`   Обновлено: ${updatedCount}`);
+    console.log(`   Обновлено (рейтинг сохранён): ${updatedCount}`);
     console.log(`   Всего в базе: ${db.length}`);
 
     if (verifyMode) {

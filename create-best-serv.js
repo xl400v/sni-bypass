@@ -1,26 +1,16 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.2.3
+ * Version: 2.2.4
  * Date: 21 May 2026
  */
 
 const fs = require('fs');
+const { extractHostPort } = require('./db-utils');
 
 const header = `#profile-title: 🧢 Free Rnd Serv\n` +
                `#profile-update-interval: 4\n` +
                `#support-url: https://t.me/+cnBIozEwEzpkYzQy\n` +
                `#hide-settings: 0\n\n`;
-
-function extractHostPortFromSubscription(subscription) {
-    try {
-        const urlPart = subscription.split('#')[0];
-        // Ищем @host:port? где host — буквы/цифры/точки, port — цифры
-        const match = urlPart.match(/@([a-zA-Z0-9.-]+:\d+)/);
-        return match[1];
-    } catch (e) {
-        return null;
-    }
-}
 
 async function createBestServFile(db, outputFile, today) {
     if (!db || db.length === 0) {
@@ -57,7 +47,7 @@ async function createBestServFile(db, outputFile, today) {
     const finalList = [];
 
     for (const record of tempList) {
-        const hp = extractHostPortFromSubscription(record.subscription);
+        const hp = extractHostPort(record.subscription);
         if (!hp || seen.has(hp)) continue;
         seen.add(hp);
         finalList.push(record);

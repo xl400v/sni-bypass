@@ -1,7 +1,9 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.1.4
+ * Version: 2.1.5
  * Date: 21 May 2026
+ * 
+ * Запуск: npm run check   или   node verify-access.js
  */
 
 const fs = require('fs');
@@ -149,10 +151,18 @@ async function saveDatabase(records) {
 
 // ====================== MAIN LOGIC ======================
 
-async function verifyAccess(db, today) {
-    console.log('🚀 Запуск проверки telegram.org и youtube.com...\n');
+async function verifyAccess(db, today, isStandalone = false) {
+    console.log('🚀 Запуск проверки telegram.org | vkvideo.ru | youtube.com...\n');
 
-    const toCheck = db.filter(r => r.lastCheck === today && parseInt(r.rating) === INITIAL_RATING);
+    let toCheck;
+    if (isStandalone) {
+        // При самостоятельном запуске проверяем все записи с рейтингом INITIAL_RATING
+        toCheck = db.filter(r => parseInt(r.rating) === INITIAL_RATING);
+        console.log('⚙️ Режим самостоятельного запуска — проверяются все записи с рейтингом 70\n');
+    } else {
+        // При вызове из main.js — только сегодняшние
+        toCheck = db.filter(r => r.lastCheck === today && parseInt(r.rating) === INITIAL_RATING);
+    }
 
     console.log(`Найдено записей для проверки: ${toCheck.length}\n`);
 
@@ -160,6 +170,7 @@ async function verifyAccess(db, today) {
         const hostPort = extractHostPort(record.subscription);
         console.log(`Проверка → ${record.country.padEnd(4)} | ${hostPort}`);
 
+        // telegram.org
         const tgResult = await checkSite(record.subscription, 'telegram.org');
         if (tgResult.success) {
             record.tg = String(tgResult.latency);
@@ -171,6 +182,19 @@ async function verifyAccess(db, today) {
             console.log(`   ❌ telegram.org → недоступен`);
         }
 
+        // vkvideo.ru (новая проверка)
+        const vkResult = await checkSite(record.subscription, 'vkvideo.ru');
+        if (vkResult.success) {
+            record.vkvideo = String(vkResult.latency);
+            record.rating = String(parseInt(record.rating) + 10);
+            console.log(`   ✅ vkvideo.ru → ${vkResult.latency} ms`);
+        } else {
+            record.vkvideo = "0";
+            record.rating = String(parseInt(record.rating) - 5);
+            console.log(`   ❌ vkvideo.ru → недоступен`);
+        }
+
+        // youtube.com
         const ytResult = await checkSite(record.subscription, 'youtube.com');
         if (ytResult.success) {
             record.yt = String(ytResult.latency);
@@ -190,26 +214,26 @@ async function verifyAccess(db, today) {
         try { await fs.promises.unlink(TEMP_CONFIG_PATH).catch(() => {}); } catch (e) {}
         console.log(`\n✅ Проверка завершена.`);
     } else {
-        console.log(`\nℹ️ Нет записей для проверки сегодня.`);
+        console.log(`\nℹ️ Нет записей для проверки.`);
     }
 }
 
 // ====================== EXECUTION ======================
 
-// Автозапуск при прямом вызове node verify-access.js
 if (require.main === module) {
+    // Самостоятельный запуск
     (async () => {
-        console.log('🚀 verify-access.js запущен напрямую\n');
+        console.log('🚀 verify-access.js запущен в standalone режиме\n');
         try {
             const db = await loadDatabase();
             const today = new Date().toISOString().split('T')[0];
-            await verifyAccess(db, today);
+            await verifyAccess(db, today, true);   // isStandalone = true
         } catch (err) {
             console.error('💥 Ошибка:', err.message);
             process.exit(1);
         }
     })();
+} else {
+    // Вызов из main.js
+    module.exports = { verifyAccess };
 }
-
-// Минимальный экспорт для main.js
-module.exports = { verifyAccess };

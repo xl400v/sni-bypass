@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.1.0
- * Date: 20 May 2026
+ * Version: 2.1.5
+ * Date: 21 May 2026
  */
 
 const fs = require('fs');
@@ -17,7 +17,8 @@ const {
     FTP_CONFIG,
     COUNTRY_FLAGS,
     INITIAL_RATING,
-    CSV_HEADER 
+    CSV_HEADER,
+    CHECK_SITES
 } = config;
 
 // ====================== УТИЛИТЫ ======================
@@ -68,6 +69,7 @@ function parseSubscription(line) {
             country: getCountry(remark),
             cidr: remark.includes('CIDR') ? 1 : 0,
             tg: 0,
+            vkvideo: 0,
             yt: 0,
             quic: extractQuic(line)
         };
@@ -148,13 +150,19 @@ async function main() {
                 country: sub.country,
                 cidr: sub.cidr,
                 tg: 0,
+                vkvideo: 0,
                 yt: 0,
                 quic: sub.quic,
                 subscription: sub.subscription
             });
             newCount++;
         } else {
-            dbMap.get(sub.quic).lastCheck = today;
+            const existing = dbMap.get(sub.quic);
+            existing.lastCheck = today;
+            // Обнуляем результаты проверок при обновлении
+            existing.tg = "0";
+            existing.vkvideo = "0";
+            existing.yt = "0";
             updatedCount++;
         }
     }
@@ -166,37 +174,35 @@ async function main() {
     console.log(`   Новых: ${newCount}`);
     console.log(`   Обновлено: ${updatedCount}`);
 
-    try {
-        // === Проверка TG/YT ===
-        if (verifyMode) {
-            try {
-                const { verifyAccess } = require('./verify-access.js');
-                await verifyAccess(db, today);
-            } catch (e) {
-                console.error('❌ Ошибка при выполнении проверки TG/YT:', e.message);
-            }
+    if (verifyMode) {
+        try {
+            const { verifyAccess } = require('./verify-access.js');
+            await verifyAccess(db, today);   // вызываем как модуль (без standalone-режима)
+        } catch (e) {
+            console.error('❌ Ошибка при выполнении проверки:', e.message);
         }
+    }
 
+    try {
         const { createBestServFile } = require('./create-best-serv.js');
         await createBestServFile(db, OUTPUT_FILE, today);
 
+        // ... (FTP часть без изменений)
         try {
-            await fs.promises.access(OUTPUT_FILE).then(() => {
-                console.log('📤 Загрузка на FTP...');
-            });
+            await fs.promises.access(OUTPUT_FILE);
+            console.log('📤 Загрузка на FTP...');
             const { uploadToFTP } = require('./ftp-upload.js');
             await uploadToFTP(OUTPUT_FILE, FTP_CONFIG);
 
-            await fs.promises.unlink(OUTPUT_FILE).then(() => {
-                console.log(`🗑 Файл ${OUTPUT_FILE} удалён`);
-            });
+            await fs.promises.unlink(OUTPUT_FILE);
+            console.log(`🗑 Файл ${OUTPUT_FILE} удалён`);
         } catch (e) {
             if (e.code === 'ENOENT') {
-                console.warn(`⚠️ Файл ${OUTPUT_FILE} не найден — нечего загружать`);
+                console.warn(`⚠️ Файл ${OUTPUT_FILE} не найден`);
             }
         }
     } catch (err) {
-        console.error('❌ Ошибка при выполнении проверки TG/YT:', err.message);
+        console.error('❌ Ошибка при создании best-serv или загрузке:', err.message);
     }
 }
 

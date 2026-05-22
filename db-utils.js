@@ -1,8 +1,8 @@
 /**
  * Database and Utility functions
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.2.4
- * Date: 21 May 2026
+ * Version: 2.3.0
+ * Date: 22 May 2026
  */
 
 const fs = require('fs');
@@ -11,12 +11,11 @@ const csvParser = require('csv-parser');
 const { DB_FILE, CSV_HEADER } = require('./config');
 
 /** Извлечение host:port из subscription */
-function extractHostPort(subscription) {
+function extractHostPort(line) {
     try {
-        const urlPart = subscription.split('#')[0];
-        // Ищем @host:port? где host — буквы/цифры/точки, port — цифры
+        const urlPart = line.split('#')[0];
         const match = urlPart.match(/@([a-zA-Z0-9.-]+:\d+)/);
-        return match[1];
+        return match ? match[1] : null;
     } catch (e) {
         return null;
     }
@@ -35,17 +34,32 @@ async function loadDatabase() {
         fs.createReadStream(DB_FILE)
             .pipe(csvParser())
             .on('data', data => records.push(data))
-            .on('end', () => resolve(records))
+            .on('end', () => resolve(records.filter(r => r && Object.keys(r).length)))
             .on('error', reject);
     });
 }
 
-/** Сохранение базы данных с сортировкой */
+/** Сохранение базы с новой сортировкой */
 async function saveDatabase(records) {
     records.sort((a, b) => {
-        if (a.lastCheck !== b.lastCheck) return b.lastCheck.localeCompare(a.lastCheck);
-        if (parseInt(b.rating) !== parseInt(a.rating)) return parseInt(b.rating) - parseInt(a.rating);
-        return parseInt(a.vkvideo || 99999) - parseInt(b.vkvideo || 99999);
+        // 1. lastCheck по убыванию
+        if (a.lastCheck !== b.lastCheck) {
+            return b.lastCheck.localeCompare(a.lastCheck);
+        }
+        // 2. rating по убыванию
+        const ratingA = parseInt(a.rating);
+        const ratingB = parseInt(b.rating);
+        if (ratingA !== ratingB) {
+            return ratingB - ratingA;
+        }
+        // 3. vkvideo по возрастанию, но 0 в конец
+        const vkA = parseInt(a.vkvideo || 0);
+        const vkB = parseInt(b.vkvideo || 0);
+        
+        if (vkA === 0 && vkB === 0) return 0;
+        if (vkA === 0) return 1;   // 0 отправляем в конец
+        if (vkB === 0) return -1;
+        return vkA - vkB;
     });
 
     const writer = createObjectCsvWriter({ path: DB_FILE, header: CSV_HEADER });

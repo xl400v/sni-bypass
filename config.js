@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.2.4
- * Date: 21 May 2026
+ * Version: 2.3.0
+ * Date: 22 May 2026
  */
 
 const path = require('path');
@@ -13,7 +13,7 @@ module.exports = {
 
     DEFAULT_SUBSCRIPTIONS_URL: 'https://github.com/hussaroff/lte-universal-checked/raw/refs/heads/main/checked.txt',
 
-    INITIAL_RATING: 70,
+    INITIAL_RATING: 150,
 
     FTP_CONFIG: {
         host: 'name.org',

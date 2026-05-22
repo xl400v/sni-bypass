@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.2.4
- * Date: 21 May 2026
+ * Version: 2.3.0
+ * Date: 22 May 2026
  */
 
 const fs = require('fs');
@@ -14,7 +14,7 @@ const header = `#profile-title: 🧢 Free Rnd Serv\n` +
 
 async function createBestServFile(db, outputFile, today) {
     if (!db || db.length === 0) {
-        console.log('⚠️ Нет данных для создания best-serv.txt');
+        console.log('⚠️  Нет данных для создания best-serv.txt');
         return;
     }
 
@@ -55,15 +55,21 @@ async function createBestServFile(db, outputFile, today) {
 
     finalList.sort((a, b) => a.priority - b.priority);
 
-    const best = finalList.slice(0, 4);
+    const best = finalList.slice(0, 7);
 
     const timeForFooter = new Date().toISOString().slice(0, 16).replace('T', ' ');
     let content = header;
     best.forEach(r => content += r.subscription + '\n');
-    content += `vless://1.1.1.1:443?type=tcp#Checked%20${today}T${timeForFooter.split(' ')[1]}%20%F0%9F%AA%83\n`;
+    content += `vless://1.1.1.1:443?type=tcp#`;
+    content += best.length > 0 ? `Checked%20%F0%9F%9B%A1%EF%B8%8F` : `No found%20%E2%9A%94%EF%B8%8F`;
+    content += `%20${today}T${timeForFooter.split(' ')[1]}\n`;
 
     fs.writeFileSync(outputFile, content.trim());
-    console.log(`📄 ${outputFile} успешно создан (${best.length} серверов)`);
+    if (best.length > 0 ) {
+        console.log(`\n🛡️  ${outputFile} успешно создан (${best.length} серверов)`);
+    } else {
+        console.log(`\n⚔️  Список серверов пустой. И база серверов пустая!`);
+    }
 }
 
 module.exports = { createBestServFile };

@@ -1,14 +1,12 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.2.4
- * Date: 21 May 2026
+ * Version: 2.3.0
+ * Date: 22 May 2026
  */
 
 const fs = require('fs');
 const fetch = require('node-fetch');
-const { loadDatabase, saveDatabase, extractHostPort } = require('./db-utils');
 const config = require('./config');
-
 const { 
     DEFAULT_SUBSCRIPTIONS_URL,
     OUTPUT_FILE, 
@@ -16,6 +14,12 @@ const {
     COUNTRY_FLAGS,
     INITIAL_RATING
 } = config;
+
+const {
+    loadDatabase,
+    saveDatabase,
+    extractHostPort
+} = require('./db-utils');
 
 function extractQuic(line) {
     const match = line.match(/(?<=\/\/)[^/@]+(?=@)/);
@@ -30,6 +34,7 @@ function getCountry(remark) {
     return 'EU';
 }
 
+/** Парсинг одной строки подписки */
 function parseSubscription(line) {
     try {
         if (!line || line.startsWith('#')) return null;
@@ -57,10 +62,10 @@ function parseSubscription(line) {
 
         return {
             subscription: line.trim(),
-            host: `${host}:${port}`,
+            hostPort: `${host}:${port}`,
+            quic: extractQuic(line),
             protocol: protoType,
-            country: getCountry(remark),
-            quic: extractQuic(line)
+            country: getCountry(remark)
         };
     } catch (e) {
         return null;
@@ -91,46 +96,55 @@ async function main() {
     const newSubscriptions = text.split('\n').map(parseSubscription).filter(Boolean);
     console.log(`✅ Отфильтровано серверов из источника: ${newSubscriptions.length}`);
 
-    let db = await loadDatabase();
-    const dbMap = new Map(); // ключ = host:port
-
-    // Заполняем карту существующими записями
-    db.forEach(record => {
-        const hp = extractHostPort(record.subscription);
-        if (hp) dbMap.set(hp, record);
-    });
-
     let newCount = 0, updatedCount = 0;
-    const now = new Date();
-    const today = now.toISOString().split('T')[0];
+
+    let db = await loadDatabase();
+    const today = new Date().toISOString().split('T')[0];
+    const dbMap = new Map(
+        db.map(sub => [`${extractHostPort(sub.subscription)}`, sub]) // ключ = host:port
+    );
 
     for (const sub of newSubscriptions) {
         if (!sub.quic) continue;
-        
-        let ratingToKeep = String(INITIAL_RATING);
-        const existing = dbMap.get(sub.host);
+
+        let tgToKeep = 0, vkToKeep = 0, ytToKeep = 0;
+        let ratingToKeep = parseInt(INITIAL_RATING, 10);
+        // Проверка дедубликации
+        let existing = Array.from(dbMap.values()).find(r => {
+            const hp = extractHostPort(r.subscription);
+            return hp === sub.hostPort || r.quic === sub.quic
+        });
 
         if (existing) {
-            // Сначала проверяем по host:port, затем по quic (как требовалось)
             ratingToKeep = existing.rating;
-            updatedCount++;
+            tgToKeep = existing.tg;
+            vkToKeep = existing.vkvideo;
+            ytToKeep = existing.yt;
+            if (existing.quic === sub.quic) {
+                ratingToKeep = INITIAL_RATING / 3 * 2;
+                updatedCount++;
+        //        console.log("   🧲", sub.quic.padEnd(36), sub.hostPort);
+        //    } else {
+        //        dbMap.delete(sub.hostPort);
+            }
         } else {
             newCount++;
+        //    console.log("     ", sub.quic.padEnd(36), sub.hostPort);
         }
 
         const record = {
-            lastCheck: today,
+            lastCheck: existing ? existing.lastCheck : today,
             rating: ratingToKeep,
             protocol: sub.protocol,
             country: sub.country,
-            tg: "0",
-            vkvideo: "0",
-            yt: "0",
-            quic: dbMap.get(sub.host) ? existing.quic : sub.quic,
+            tg: tgToKeep,
+            vkvideo: vkToKeep,
+            yt: ytToKeep,
+            quic: sub.quic,
             subscription: sub.subscription
         };
 
-        dbMap.set(sub.host, record);
+        dbMap.set(sub.hostPort, record);
     }
 
     db = Array.from(dbMap.values());
@@ -138,18 +152,20 @@ async function main() {
 
     console.log(`\n📊 Итоги обработки:`);
     console.log(`   Новых: ${newCount}`);
-    console.log(`   Обновлено (рейтинг сохранён): ${updatedCount}`);
+    console.log(`   Обновлено: ${updatedCount}`);
     console.log(`   Всего в базе: ${db.length}`);
 
     if (verifyMode) {
         try {
             const { verifyAccess } = require('./verify-access.js');
+            console.log('🚀 Запуск проверки telegram.org | vkvideo.ru | youtube.com...\n');
             await verifyAccess(db, today);
         } catch (e) {
             console.error('❌ Ошибка при выполнении проверки:', e.message);
         }
     }
 
+    // Создание best-serv и FTP (без изменений)
     try {
         const { createBestServFile } = require('./create-best-serv.js');
         await createBestServFile(db, OUTPUT_FILE, today);
@@ -158,13 +174,12 @@ async function main() {
             console.log('📤 Загрузка на FTP...');
             const { uploadToFTP } = require('./ftp-upload.js');
             await uploadToFTP(OUTPUT_FILE, FTP_CONFIG);
-
             await fs.promises.unlink(OUTPUT_FILE);
-            console.log(`🗑 Файл ${OUTPUT_FILE} удалён`);
+            console.log(` 🗑 Файл ${OUTPUT_FILE} удалён`);
         }
     } catch (err) {
         console.error('❌ Ошибка при создании best-serv или загрузке:', err.message);
     }
 }
 
-main().catch(err => console.error('💥 Ошибка:', err));
+main().catch(err => console.error('💥 Ошибка main.js:', err));

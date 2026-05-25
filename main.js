@@ -1,12 +1,14 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.3.0
- * Date: 22 May 2026
+ * Version: 2.3.1
+ * Date: 25 May 2026
  */
 
 const fs = require('fs');
 const fetch = require('node-fetch');
+const { loadDatabase, saveDatabase, extractHostPort } = require('./db-utils');
 const config = require('./config');
+
 const { 
     DEFAULT_SUBSCRIPTIONS_URL,
     OUTPUT_FILE, 
@@ -14,12 +16,6 @@ const {
     COUNTRY_FLAGS,
     INITIAL_RATING
 } = config;
-
-const {
-    loadDatabase,
-    saveDatabase,
-    extractHostPort
-} = require('./db-utils');
 
 function extractQuic(line) {
     const match = line.match(/(?<=\/\/)[^/@]+(?=@)/);
@@ -34,7 +30,7 @@ function getCountry(remark) {
     return 'EU';
 }
 
-/** Парсинг одной строки подписки */
+/** Основная функция парсинга (объединённая и улучшенная) */
 function parseSubscription(line) {
     try {
         if (!line || line.startsWith('#')) return null;
@@ -45,6 +41,7 @@ function parseSubscription(line) {
         const protocolRaw = url.protocol.replace(':', '').toUpperCase();
         const host = url.hostname;
         const port = parseInt(url.port) || 443;
+        const fragment = url.searchParams.get('fm') || url.searchParams.get('fragment') || Null;
         const type = url.searchParams.get('type') || '';
         const security = url.searchParams.get('security') || '';
         const sni = url.searchParams.get('sni') || '';
@@ -56,7 +53,7 @@ function parseSubscription(line) {
             else if (type === 'xhttp') protoType = 'VLESS+XHTTP+REALITY';
         }
 
-        if (!protoType || sni.toLowerCase().includes('max.ru')) return null;
+        if (!protoType || fragment || sni.toLowerCase().includes('max.ru')) return null;
 
         const remark = line.split('#').pop() || '';
 
@@ -97,7 +94,6 @@ async function main() {
     console.log(`✅ Отфильтровано серверов из источника: ${newSubscriptions.length}`);
 
     let newCount = 0, updatedCount = 0;
-
     let db = await loadDatabase();
     const today = new Date().toISOString().split('T')[0];
     const dbMap = new Map(

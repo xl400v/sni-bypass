@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.3.0
- * Date: 22 May 2026
+ * Version: 2.3.1
+ * Date: 25 May 2026
  */
 
 const path = require('path');
@@ -27,9 +27,9 @@ module.exports = {
     CHECK_DELAY_MS: 2000,
 
     CHECK_SITES: [
-        { field: 'tg',      url: 'telegram.org', name: 'telegram.org' },
-        { field: 'vkvideo', url: 'vkvideo.ru',   name: 'vkvideo.ru' },
-        { field: 'yt',      url: 'youtube.com',  name: 'youtube.com' }
+        { field: 'tg',      url: 'telegram.org', name: 'telegram' },
+        { field: 'vkvideo', url: 'vkvideo.ru',   name: 'vkvideo' },
+        { field: 'yt',      url: 'youtube.com',  name: 'youtube' }
     ],
 
     CSV_HEADER: [
@@ -44,25 +44,26 @@ module.exports = {
         { id: 'subscription', title: 'subscription' }
     ],
 
+    // Отсортировано по коду страны (A → Z)
     COUNTRY_FLAGS: {
+        '%F0%9F%87%A6%F0%9F%87%B9': 'AT',
+        '%F0%9F%87%A7%F0%9F%87%BE': 'BY',
+        '%F0%9F%87%A8%F0%9F%87%A6': 'CA',
+        '%F0%9F%87%A8%F0%9F%87%B7': 'CZ',
         '%F0%9F%87%A9%F0%9F%87%AA': 'DE',
-        '%F0%9F%87%B7%F0%9F%87%BA': 'RU',
-        '%F0%9F%87%B1%F0%9F%87%B9': 'LT',
-        '%F0%9F%87%B3%F0%9F%87%B1': 'NL',
-        '%F0%9F%87%B5%F0%9F%87%B1': 'PL',
-        '%F0%9F%87%B1%F0%9F%87%BB': 'LV',
-        '%F0%9F%87%B0%F0%9F%87%B7': 'KR',
+        '%F0%9F%87%AA%F0%9F%87%AA': 'EE',
         '%F0%9F%87%AB%F0%9F%87%AE': 'FI',
         '%F0%9F%87%AB%F0%9F%87%B7': 'FR',
-        '%F0%9F%87%B0%F0%9F%87%BF': 'KZ',
-        '%F0%9F%87%B9%F0%9F%87%AD': 'TH',
         '%F0%9F%87%AC%F0%9F%87%A7': 'GB',
-        '%F0%9F%87%A8%F0%9F%87%A6': 'CA',
-        '%F0%9F%87%BA%F0%9F%87%B8': 'US',
-        '%F0%9F%87%A6%F0%9F%87%B9': 'AT',
-        '%F0%9F%87%AA%F0%9F%87%AA': 'EE',
+        '%F0%9F%87%B0%F0%9F%87%BF': 'KZ',
+        '%F0%9F%87%B0%F0%9F%87%B7': 'KR',
+        '%F0%9F%87%B1%F0%9F%87%B9': 'LT',
+        '%F0%9F%87%B1%F0%9F%87%BB': 'LV',
+        '%F0%9F%87%B3%F0%9F%87%B1': 'NL',
+        '%F0%9F%87%B5%F0%9F%87%B1': 'PL',
+        '%F0%9F%87%B7%F0%9F%87%BA': 'RU',
         '%F0%9F%87%B8%F0%9F%87%AA': 'SE',
-        '%F0%9F%87%A8%F0%9F%87%B7': 'CZ',
-        '%F0%9F%87%A7%F0%9F%87%BE': 'BY'
+        '%F0%9F%87%B9%F0%9F%87%AD': 'TH',
+        '%F0%9F%87%BA%F0%9F%87%B8': 'US'
     }
 };

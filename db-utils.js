@@ -1,8 +1,8 @@
 /**
  * Database and Utility functions
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.3.0
- * Date: 22 May 2026
+ * Version: 2.3.1
+ * Date: 25 May 2026
  */
 
 const fs = require('fs');
@@ -14,7 +14,7 @@ const { DB_FILE, CSV_HEADER } = require('./config');
 function extractHostPort(line) {
     try {
         const urlPart = line.split('#')[0];
-        const match = urlPart.match(/@([a-zA-Z0-9.-]+:\d+)/);
+        const match = urlPart.match(/@([_a-zA-Z0-9.-]+:\d+)/);
         return match ? match[1] : null;
     } catch (e) {
         return null;
@@ -39,13 +39,11 @@ async function loadDatabase() {
     });
 }
 
-/** Сохранение базы с новой сортировкой */
+/** Сохранение базы */
 async function saveDatabase(records) {
     records.sort((a, b) => {
         // 1. lastCheck по убыванию
-        if (a.lastCheck !== b.lastCheck) {
-            return b.lastCheck.localeCompare(a.lastCheck);
-        }
+        if (a.lastCheck !== b.lastCheck) return b.lastCheck.localeCompare(a.lastCheck);
         // 2. rating по убыванию
         const ratingA = parseInt(a.rating);
         const ratingB = parseInt(b.rating);
@@ -55,9 +53,8 @@ async function saveDatabase(records) {
         // 3. vkvideo по возрастанию, но 0 в конец
         const vkA = parseInt(a.vkvideo || 0);
         const vkB = parseInt(b.vkvideo || 0);
-        
         if (vkA === 0 && vkB === 0) return 0;
-        if (vkA === 0) return 1;   // 0 отправляем в конец
+        if (vkA === 0) return 1;
         if (vkB === 0) return -1;
         return vkA - vkB;
     });

@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.3.0
- * Date: 22 May 2026
+ * Version: 2.3.1
+ * Date: 25 May 2026
  * 
  * Запуск: npm run check   или   node verify-access.js
  */
@@ -81,17 +81,18 @@ function parseVlessSubscription(line) {
 }
 
 async function checkSite(subscription, site) {
+    const proc = spawn(XRAY_PATH, ['run', '-c', TEMP_CONFIG_PATH], { 
+        stdio: ['ignore', 'ignore', 'pipe'] 
+    });
     const parsed = parseVlessSubscription(subscription);
-    if (!parsed) return { success: 0, latency: 0 };
-
     const cfg = createXrayConfig(parsed);
+    if (!parsed) {
+        return { success: 0, latency: 0 };
+    }
     fs.writeFileSync(TEMP_CONFIG_PATH, JSON.stringify(cfg, null, 2));
 
     return new Promise((resolve) => {
         const start = Date.now();
-        const proc = spawn(XRAY_PATH, ['run', '-c', TEMP_CONFIG_PATH], { 
-            stdio: ['ignore', 'ignore', 'pipe'] 
-        });
 
         setTimeout(async () => {
             try {

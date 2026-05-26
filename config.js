@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.3.1
- * Date: 25 May 2026
+ * Version: 2.3.2
+ * Date: 26 May 2026
  */
 
 const path = require('path');
@@ -27,9 +27,9 @@ module.exports = {
     CHECK_DELAY_MS: 2000,
 
     CHECK_SITES: [
-        { field: 'tg',      url: 'telegram.org', name: 'telegram' },
-        { field: 'vkvideo', url: 'vkvideo.ru',   name: 'vkvideo' },
-        { field: 'yt',      url: 'youtube.com',  name: 'youtube' }
+        { id: 'tg', url: 'telegram.org' },
+        { id: 'vkvideo', url: 'vkvideo.ru' },
+        { id: 'yt', url: 'youtube.com' }
     ],
 
     CSV_HEADER: [
@@ -48,6 +48,7 @@ module.exports = {
     COUNTRY_FLAGS: {
         '%F0%9F%87%A6%F0%9F%87%B9': 'AT',
         '%F0%9F%87%A7%F0%9F%87%BE': 'BY',
+        '%F0%9F%87%A7%F0%9F%87%AC': 'BG',
         '%F0%9F%87%A8%F0%9F%87%A6': 'CA',
         '%F0%9F%87%A8%F0%9F%87%B7': 'CZ',
         '%F0%9F%87%A9%F0%9F%87%AA': 'DE',
@@ -55,6 +56,7 @@ module.exports = {
         '%F0%9F%87%AB%F0%9F%87%AE': 'FI',
         '%F0%9F%87%AB%F0%9F%87%B7': 'FR',
         '%F0%9F%87%AC%F0%9F%87%A7': 'GB',
+        '%F0%9F%87%AE%F0%9F%87%B9': 'IT',
         '%F0%9F%87%B0%F0%9F%87%BF': 'KZ',
         '%F0%9F%87%B0%F0%9F%87%B7': 'KR',
         '%F0%9F%87%B1%F0%9F%87%B9': 'LT',

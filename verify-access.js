@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.3.1
- * Date: 25 May 2026
+ * Version: 2.3.2
+ * Date: 26 May 2026
  * 
  * Запуск: npm run check   или   node verify-access.js
  */
@@ -151,16 +151,12 @@ async function verifyAccess(db, today, isStandalone = false) {
             console.log(`   ❌ telegram.org → недоступен`);
         }
 
-        // vkvideo.ru
-        const vkResult = await checkSite(record.subscription, 'vkvideo.ru');
-        if (vkResult.success) {
-            record.vkvideo = String(vkResult.latency);
-            record.rating = String(parseInt(record.rating) + 30);
-            console.log(`   ✅ vkvideo.ru → ${vkResult.latency} ms`);
-        } else {
-            record.vkvideo = "0";
-            record.rating = String(parseInt(record.rating) - 10);
-            console.log(`   ❌ vkvideo.ru → недоступен`);
+        // vkvideo.ru — только в standalone-режиме
+        if (isStandalone) {
+            const vkResult = await checkSite(record.subscription, 'vkvideo.ru');
+            record.vkvideo = vkResult.success ? String(vkResult.latency) : "0";
+            record.rating = String(parseInt(record.rating) + (vkResult.success ? 30 : -10));
+            if (vkResult.success) console.log(`   ✅ vkvideo.ru → ${vkResult.latency} ms`);
         }
 
         // youtube.com

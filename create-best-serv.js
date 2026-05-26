@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.3.1
- * Date: 25 May 2026
+ * Version: 2.3.2
+ * Date: 26 May 2026
  */
 
 const fs = require('fs');
@@ -84,7 +84,7 @@ async function createBestServFile(db, outputFile, today) {
     finalList.sort((a, b) => a.priority - b.priority);
     const best = finalList.slice(0, 6);
     // Специальная последняя строка с fm-параметром
-    const fmParam = '&fm=7B%22settings%22%3A%7B%22tg%22%3A%22Newspaper%22%2C%22vk%22%3A%22Projector%22%2C%22yt%22%3A%22Television%22%7D';
+    const fmParam = 'fm=%7B%22tcp%22%3A%5B%7B%22type%22%3A%22tg+-+%F0%9F%93%B0%2C+vkvideo+-+%F0%9F%93%BD%EF%B8%8F%2C+yt+-+%F0%9F%93%BA%22%7D%5D%7D';
 
 
     const timeForFooter = new Date().toISOString().slice(0, 16).replace('T', ' ');
@@ -95,7 +95,7 @@ async function createBestServFile(db, outputFile, today) {
         content += processedSub + '\n';
     });
 
-    content += `vless://1.1.1.1:443?type=tcp${fmParam}#`;
+    content += `vless://1.1.1.1:443?${fmParam}&type=tcp#`;
     content += best.length > 0 ? `Checked%20%F0%9F%9B%A1%EF%B8%8F` : `No found%20%E2%9A%94%EF%B8%8F`;
     content += `%20${today}T${timeForFooter.split(' ')[1]}\n`;
 

@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.3.1
- * Date: 25 May 2026
+ * Version: 2.3.2
+ * Date: 26 May 2026
  */
 
 const fs = require('fs');
@@ -38,10 +38,8 @@ function parseSubscription(line) {
         const urlPart = line.split('#')[0];
         const url = new URL(urlPart);
 
+        const fragment = url.searchParams.get('fm') || url.searchParams.get('fragment') || '';
         const protocolRaw = url.protocol.replace(':', '').toUpperCase();
-        const host = url.hostname;
-        const port = parseInt(url.port) || 443;
-        const fragment = url.searchParams.get('fm') || url.searchParams.get('fragment') || Null;
         const type = url.searchParams.get('type') || '';
         const security = url.searchParams.get('security') || '';
         const sni = url.searchParams.get('sni') || '';
@@ -59,7 +57,7 @@ function parseSubscription(line) {
 
         return {
             subscription: line.trim(),
-            hostPort: `${host}:${port}`,
+            hostPort: `${url.hostname}:${parseInt(url.port) || 443}`,
             quic: extractQuic(line),
             protocol: protoType,
             country: getCountry(remark)
@@ -97,7 +95,7 @@ async function main() {
     let db = await loadDatabase();
     const today = new Date().toISOString().split('T')[0];
     const dbMap = new Map(
-        db.map(sub => [`${extractHostPort(sub.subscription)}`, sub]) // ключ = host:port
+        db.map(record => [extractHostPort(record.subscription), record])
     );
 
     for (const sub of newSubscriptions) {
@@ -154,7 +152,7 @@ async function main() {
     if (verifyMode) {
         try {
             const { verifyAccess } = require('./verify-access.js');
-            console.log('🚀 Запуск проверки telegram.org | vkvideo.ru | youtube.com...\n');
+            console.log('🚀 Запуск проверки telegram.org | youtube.com...\n');
             await verifyAccess(db, today);
         } catch (e) {
             console.error('❌ Ошибка при выполнении проверки:', e.message);

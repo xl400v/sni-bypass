@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.3.2
+ * Version: 2.4.0
  * Date: 26 May 2026
  * 
  * Запуск: npm run check   или   node verify-access.js
@@ -9,17 +9,13 @@
 const fs = require('fs');
 const { spawn } = require('child_process');
 const config = require('./config');
+const { getUrlsById, loadDatabase, saveDatabase, extractHostPort } = require('./db-utils');
+
 const { 
     XRAY_PATH, 
     TEMP_CONFIG_PATH, 
     CHECK_DELAY_MS
 } = config;
-
-const {
-    loadDatabase,
-    saveDatabase,
-    extractHostPort
-} = require('./db-utils');
 
 // ====================== УТИЛИТЫ ======================
 
@@ -70,10 +66,10 @@ function parseVlessSubscription(line) {
             type: url.searchParams.get('type') || 'tcp',
             security: url.searchParams.get('security') || 'reality',
             sni: url.searchParams.get('sni') || '',
-            pbk: url.searchParams.get('pbk'),
             fp: url.searchParams.get('fp') || 'chrome',
             flow: url.searchParams.get('flow') || '',
-            sid: url.searchParams.get('sid') || ''
+            sid: url.searchParams.get('sid') || '',
+            pbk: url.searchParams.get('pbk')
         };
     } catch (e) {
         return null;
@@ -98,7 +94,7 @@ async function checkSite(subscription, site) {
             try {
                 const { execSync } = require('child_process');
                 const output = execSync(
-                    `curl -I -s --socks5 127.0.0.1:1080 --max-time 7 https://${site}`,
+                    `curl -I -s --socks5 127.0.0.1:1080 --max-time ${site.includes(getUrlsById('yt')) ? 7 : 5} https://${site}`,
                     { timeout: CHECK_DELAY_MS * 4 }
                 ).toString();
 
@@ -139,36 +135,39 @@ async function verifyAccess(db, today, isStandalone = false) {
         const hostPort = extractHostPort(record.subscription);
         console.log(`Проверка → ${record.country} | ${hostPort}`);
 
+        // grok.com — только в standalone-режиме
+        if (isStandalone) {
+            const gkResult = await checkSite(record.subscription, getUrlsById('gk'));
+            record.gk = gkResult.success ? String(gkResult.latency) : "0";
+            record.rating = String(parseInt(record.rating) + (gkResult.success ? 10 : -10));
+            if (gkResult.success) console.log(`   ✅ ${getUrlsById('gk')} → ${gkResult.latency} ms`);
+        } else {
+            record.gk = "0";
+        }
+
         // telegram.org
-        const tgResult = await checkSite(record.subscription, 'telegram.org');
+        const tgResult = await checkSite(record.subscription, getUrlsById('tg'));
         if (tgResult.success) {
+            record.lastCheck = today;
             record.tg = String(tgResult.latency);
             record.rating = String(parseInt(record.rating) + 30);
-            console.log(`   ✅ telegram.org → ${tgResult.latency} ms`);
+            console.log(`   ✅ ${getUrlsById('tg')} → ${tgResult.latency} ms`);
         } else {
             record.tg = "0";
             record.rating = String(parseInt(record.rating) - 10);
-            console.log(`   ❌ telegram.org → недоступен`);
-        }
-
-        // vkvideo.ru — только в standalone-режиме
-        if (isStandalone) {
-            const vkResult = await checkSite(record.subscription, 'vkvideo.ru');
-            record.vkvideo = vkResult.success ? String(vkResult.latency) : "0";
-            record.rating = String(parseInt(record.rating) + (vkResult.success ? 30 : -10));
-            if (vkResult.success) console.log(`   ✅ vkvideo.ru → ${vkResult.latency} ms`);
+            console.log(`   ❌ ${getUrlsById('tg')} → недоступен`);
         }
 
         // youtube.com
-        const ytResult = await checkSite(record.subscription, 'youtube.com');
+        const ytResult = await checkSite(record.subscription, getUrlsById('yt'));
         if (ytResult.success) {
             record.yt = String(ytResult.latency);
-            record.rating = String(parseInt(record.rating) + 30);
-            console.log(`   ✅ youtube.com → ${ytResult.latency} ms`);
+            record.rating = String(parseInt(record.rating) + 20);
+            console.log(`   ✅ ${getUrlsById('yt')} → ${ytResult.latency} ms`);
         } else {
             record.yt = "0";
             record.rating = String(parseInt(record.rating) - 10);
-            console.log(`   ❌ youtube.com → недоступен`);
+            console.log(`   ❌ ${getUrlsById('yt')} → недоступен`);
         }
 
         // Проверка на удаление
@@ -181,7 +180,7 @@ async function verifyAccess(db, today, isStandalone = false) {
     }
 
     // Формируем финальную базу без удалённых записей
-    let finalDb = db.filter(record => {
+    const finalDb = db.filter(record => {
         const hp = extractHostPort(record.subscription);
         return !recordsToRemove.has(hp);
     });

@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.3.2
+ * Version: 2.4.0
  * Date: 26 May 2026
  */
 
@@ -26,20 +26,14 @@ module.exports = {
     TEMP_CONFIG_PATH: 'temp-xray-config.json',
     CHECK_DELAY_MS: 2000,
 
-    CHECK_SITES: [
-        { id: 'tg', url: 'telegram.org' },
-        { id: 'vkvideo', url: 'vkvideo.ru' },
-        { id: 'yt', url: 'youtube.com' }
-    ],
-
     CSV_HEADER: [
         { id: 'lastCheck', title: 'lastCheck' },
         { id: 'rating', title: 'rating' },
         { id: 'protocol', title: 'protocol' },
         { id: 'country', title: 'country' },
-        { id: 'tg', title: 'tg' },
-        { id: 'vkvideo', title: 'vkvideo' },
-        { id: 'yt', title: 'yt' },
+        { id: 'gk', title: 'grok', url: 'grok.com' },
+        { id: 'tg', title: 'tg', url: 'telegram.org' },
+        { id: 'yt', title: 'youtube', url: 'youtube.com' },
         { id: 'quic', title: 'quic' },
         { id: 'subscription', title: 'subscription' }
     ],
@@ -50,7 +44,7 @@ module.exports = {
         '%F0%9F%87%A7%F0%9F%87%BE': 'BY',
         '%F0%9F%87%A7%F0%9F%87%AC': 'BG',
         '%F0%9F%87%A8%F0%9F%87%A6': 'CA',
-        '%F0%9F%87%A8%F0%9F%87%B7': 'CZ',
+        '%F0%9F%87%A8%F0%9F%87%BF': 'CZ',
         '%F0%9F%87%A9%F0%9F%87%AA': 'DE',
         '%F0%9F%87%AA%F0%9F%87%AA': 'EE',
         '%F0%9F%87%AB%F0%9F%87%AE': 'FI',

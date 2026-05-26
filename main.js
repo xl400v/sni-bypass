@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.3.2
+ * Version: 2.4.0
  * Date: 26 May 2026
  */
 
@@ -10,11 +10,11 @@ const { loadDatabase, saveDatabase, extractHostPort } = require('./db-utils');
 const config = require('./config');
 
 const { 
-    DEFAULT_SUBSCRIPTIONS_URL,
     OUTPUT_FILE, 
     FTP_CONFIG,
-    COUNTRY_FLAGS,
-    INITIAL_RATING
+    INITIAL_RATING,
+    DEFAULT_SUBSCRIPTIONS_URL,
+    COUNTRY_FLAGS
 } = config;
 
 function extractQuic(line) {
@@ -38,7 +38,7 @@ function parseSubscription(line) {
         const urlPart = line.split('#')[0];
         const url = new URL(urlPart);
 
-        const fragment = url.searchParams.get('fm') || url.searchParams.get('fragment') || '';
+        const fragment = url.searchParams.get('fm') || '';
         const protocolRaw = url.protocol.replace(':', '').toUpperCase();
         const type = url.searchParams.get('type') || '';
         const security = url.searchParams.get('security') || '';
@@ -101,29 +101,30 @@ async function main() {
     for (const sub of newSubscriptions) {
         if (!sub.quic) continue;
 
-        let tgToKeep = 0, vkToKeep = 0, ytToKeep = 0;
+        let gkToKeep = 0, tgToKeep = 0, ytToKeep = 0;
         let ratingToKeep = parseInt(INITIAL_RATING, 10);
         // Проверка дедубликации
-        let existing = Array.from(dbMap.values()).find(r => {
+        let existing = [...dbMap.values()].find(r => {
             const hp = extractHostPort(r.subscription);
             return hp === sub.hostPort || r.quic === sub.quic
         });
 
         if (existing) {
             ratingToKeep = existing.rating;
+            gkToKeep = existing.gk;
             tgToKeep = existing.tg;
-            vkToKeep = existing.vkvideo;
             ytToKeep = existing.yt;
             if (existing.quic === sub.quic) {
                 ratingToKeep = INITIAL_RATING / 3 * 2;
-                updatedCount++;
         //        console.log("   🧲", sub.quic.padEnd(36), sub.hostPort);
-        //    } else {
-        //        dbMap.delete(sub.hostPort);
             }
+            updatedCount++;
         } else {
+            const quics = newSubscriptions.filter(i => i.quic === sub.quic);
+            if (quics.length > 1) ratingToKeep = INITIAL_RATING / 3 * 2;
+            
+        //    console.log(`   ${quics.length} `, sub.quic.padEnd(36), sub.hostPort);
             newCount++;
-        //    console.log("     ", sub.quic.padEnd(36), sub.hostPort);
         }
 
         const record = {
@@ -131,8 +132,8 @@ async function main() {
             rating: ratingToKeep,
             protocol: sub.protocol,
             country: sub.country,
+            gk: gkToKeep,
             tg: tgToKeep,
-            vkvideo: vkToKeep,
             yt: ytToKeep,
             quic: sub.quic,
             subscription: sub.subscription
@@ -172,7 +173,7 @@ async function main() {
             console.log(` 🗑 Файл ${OUTPUT_FILE} удалён`);
         }
     } catch (err) {
-        console.error('❌ Ошибка при создании best-serv или загрузке:', err.message);
+        console.error('❌ Ошибка при создании best-serv или загрузке по ftp:', err.message);
     }
 }
 

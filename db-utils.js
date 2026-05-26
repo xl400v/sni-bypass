@@ -1,14 +1,25 @@
 /**
  * Database and Utility functions
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.3.1
- * Date: 25 May 2026
+ * Version: 2.4.0
+ * Date: 26 May 2026
  */
 
 const fs = require('fs');
 const { createObjectCsvWriter } = require('csv-writer');
 const csvParser = require('csv-parser');
-const { DB_FILE, CSV_HEADER } = require('./config');
+const config = require('./config');
+
+const { 
+    DB_FILE, 
+    CSV_HEADER
+} = config;
+
+/** Выбор (уникального значения) url по id */
+function getUrlsById(id) {
+    const site = CSV_HEADER.find(item => item.id === id);
+    return site?.url || 'google.com';
+}
 
 /** Извлечение host:port из subscription */
 function extractHostPort(line) {
@@ -50,13 +61,13 @@ async function saveDatabase(records) {
         if (ratingA !== ratingB) {
             return ratingB - ratingA;
         }
-        // 3. vkvideo по возрастанию, но 0 в конец
-        const vkA = parseInt(a.vkvideo || 0);
-        const vkB = parseInt(b.vkvideo || 0);
-        if (vkA === 0 && vkB === 0) return 0;
-        if (vkA === 0) return 1;
-        if (vkB === 0) return -1;
-        return vkA - vkB;
+        // 3. tg по возрастанию, но 0 в конец
+        const tgA = parseInt(a.tg || 0);
+        const tgB = parseInt(b.tg || 0);
+        if (tgA === 0 && tgB === 0) return 0;
+        if (tgA === 0) return 1;
+        if (tgB === 0) return -1;
+        return tgA - tgB;
     });
 
     const writer = createObjectCsvWriter({ path: DB_FILE, header: CSV_HEADER });
@@ -64,6 +75,7 @@ async function saveDatabase(records) {
 }
 
 module.exports = {
+    getUrlsById,
     extractHostPort,
     loadDatabase,
     saveDatabase

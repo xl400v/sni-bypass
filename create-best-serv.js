@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.3.2
+ * Version: 2.4.0
  * Date: 26 May 2026
  */
 
@@ -17,15 +17,15 @@ function processRemark(subscription, record) {
 
     // Добавляем иконки
     let icons = [];
+    if (parseInt(record.gk || 0) > 0) icons.push('📜');
     if (parseInt(record.tg || 0) > 0) icons.push('📰');
-    if (parseInt(record.vkvideo || 0) > 0) icons.push('📽️');
     if (parseInt(record.yt || 0) > 0) icons.push('📺');
     if (icons.length > 0) {
         remark += ' ' + icons.join(' ');
     }
 
     // Замена CIDR-подстрок
-    remark = remark.replace(/\[\*?CIDR\]|\[\*?CIDR\]\s*([A-Z]{2})/g, '💡');
+    remark = remark.replace(/(?<=%5B\*?CIDR%5D)(%20|\s)*[A-Z]{2}/g, '');
 
     // Подсчёт флагов
     const flagMatches = remark.match(/%F0%9F%87%[A-Z0-9]{2}/g) || [];
@@ -35,7 +35,7 @@ function processRemark(subscription, record) {
     }
 
     // Замена пробелов и +
-    remark = remark.replace(/(\+| )/g, '%20');
+    remark = remark.replace(/ /g, '%20');
 
     return subscription.split('#')[0] + '#' + remark;
 }
@@ -55,19 +55,20 @@ async function createBestServFile(db, outputFile, today) {
         const remarkLower = (record.subscription || '').toLowerCase();
         const hasLow = /\b(hysteria|vpn|xhttp)\b/i.test(remarkLower);
 
-        // Приоритет на основе tg (основной показатель качества)
+        // Приоритет 1 — только для ПЕРВОГО подходящего RU сервера
         if (record.country === 'RU' && !hasLow) {
-            record.priority = ruFound ? 4 : 1;
+            record.priority = ruFound ? 5 : 2;
+            if (!ruFound) ruFound = true;
         } else if (record.country === 'EU') {
-            record.priority = hasLow ? 5 : 3;
+            record.priority = hasLow ? 5 : 4;
         }
         
-        if (parseInt(record.tg || 0) > 0) record.priority--;
-        if (parseInt(record.yt || 0) > 0) record.priority--;
+        if (parseInt(record.tg) > 0) {
+            record.priority--;
+            if (parseInt(record.yt) > 0) record.priority--;
+        }
         // Гарантируем, что priority > 0
         if (record.priority < 1) record.priority = 1;
-
-        if (!ruFound && record.priority === 1) ruFound = true;
     }
 
     // Дедубликация по host:port
@@ -78,30 +79,26 @@ async function createBestServFile(db, outputFile, today) {
         const hp = extractHostPort(record.subscription);
         if (!hp || seen.has(hp)) continue;
         seen.add(hp);
-        finalList.push(record);
+        if (parseInt(record.tg) + parseInt(record.yt) > 0) finalList.push(record);
     }
 
-    finalList.sort((a, b) => a.priority - b.priority);
-    const best = finalList.slice(0, 6);
-    // Специальная последняя строка с fm-параметром
-    const fmParam = 'fm=%7B%22tcp%22%3A%5B%7B%22type%22%3A%22tg+-+%F0%9F%93%B0%2C+vkvideo+-+%F0%9F%93%BD%EF%B8%8F%2C+yt+-+%F0%9F%93%BA%22%7D%5D%7D';
-
-
-    const timeForFooter = new Date().toISOString().slice(0, 16).replace('T', ' ');
     let content = header;
+    finalList
+        .sort((a, b) => a.priority - b.priority)
+        .forEach(r => content += processRemark(r.subscription, r) + '\n');
+    
+    const best = finalList.slice(0, 6);
+    const timeForFooter = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    // Специальная последняя строка с fm-параметром
+    const fmParam = 'fm=%7B%22tcp%22%3A%5B%7B%22type%22%3A%22grok%20-%20%F0%9F%93%9C%2C%20tg%20-%20%F0%9F%93%B0%2C%20youtube%20-%20%F0%9F%93%BA%22%7D%5D%7D&';
 
-    best.forEach(r => {
-        const processedSub = processRemark(r.subscription, r);
-        content += processedSub + '\n';
-    });
-
-    content += `vless://1.1.1.1:443?${fmParam}&type=tcp#`;
+    content += `vless://1.1.1.1:443?${fmParam}type=tcp#`;
     content += best.length > 0 ? `Checked%20%F0%9F%9B%A1%EF%B8%8F` : `No found%20%E2%9A%94%EF%B8%8F`;
     content += `%20${today}T${timeForFooter.split(' ')[1]}\n`;
 
     fs.writeFileSync(outputFile, content.trim());
     if (best.length > 0 ) {
-        console.log(`\n🛡️  ${outputFile} успешно создан (${best.length} серверов)`);
+        console.log(`\n🛡️  ${outputFile} успешно создано серверов: ${best.length}`);
     } else {
         console.log(`\n⚔️  Список серверов пустой. И база серверов пустая!`);
     }

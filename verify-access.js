@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.0
- * Date: 26 May 2026
+ * Version: 2.4.1
+ * Date: 28 May 2026
  * 
  * Запуск: npm run check   или   node verify-access.js
  */
@@ -9,11 +9,12 @@
 const fs = require('fs');
 const { spawn } = require('child_process');
 const config = require('./config');
-const { getUrlsById, loadDatabase, saveDatabase, extractHostPort } = require('./db-utils');
+const { loadDatabase, saveDatabase, extractHostPort } = require('./db-utils');
 
 const { 
     XRAY_PATH, 
     TEMP_CONFIG_PATH, 
+    CSV_HEADER,
     CHECK_DELAY_MS
 } = config;
 
@@ -48,7 +49,7 @@ function createXrayConfig(parsed) {
                     serverName: parsed.sni,
                     fingerprint: parsed.fp,
                     shortId: parsed.sid,
-                    publicKey: parsed.pbk || ""
+                    publicKey: parsed.pbk
                 }
             }
         }]
@@ -69,7 +70,7 @@ function parseVlessSubscription(line) {
             fp: url.searchParams.get('fp') || 'chrome',
             flow: url.searchParams.get('flow') || '',
             sid: url.searchParams.get('sid') || '',
-            pbk: url.searchParams.get('pbk')
+            pbk: url.searchParams.get('pbk') || ''
         };
     } catch (e) {
         return null;
@@ -83,7 +84,7 @@ async function checkSite(subscription, site) {
     const parsed = parseVlessSubscription(subscription);
     const cfg = createXrayConfig(parsed);
     if (!parsed) {
-        return { success: 0, latency: 0 };
+        return { web: site.title, url: site.url, success: 0, latency: 0 };
     }
     fs.writeFileSync(TEMP_CONFIG_PATH, JSON.stringify(cfg, null, 2));
 
@@ -94,7 +95,8 @@ async function checkSite(subscription, site) {
             try {
                 const { execSync } = require('child_process');
                 const output = execSync(
-                    `curl -I -s --socks5 127.0.0.1:1080 --max-time ${site.includes(getUrlsById('yt')) ? 7 : 5} https://${site}`,
+                    `curl -I -s --socks5 127.0.0.1:1080 ` +
+                    `--max-time ${8 + (site.id === 'yt' ? -1 : -3)} https://${site.url}`,
                     { timeout: CHECK_DELAY_MS * 4 }
                 ).toString();
 
@@ -102,10 +104,10 @@ async function checkSite(subscription, site) {
                 const latency = Date.now() - start;
 
                 proc.kill();
-                resolve({ success: success ? 1 : 0, latency });
+                resolve({ web: site.title, url: site.url, success: success ? 1 : 0, latency });
             } catch (err) {
                 proc.kill();
-                resolve({ success: 0, latency: 0 });
+                resolve({ web: site.title, url: site.url, success: 0, latency: 0 });
             }
         }, CHECK_DELAY_MS);
     });
@@ -114,76 +116,55 @@ async function checkSite(subscription, site) {
 // ====================== MAIN LOGIC ======================
 
 async function verifyAccess(db, today, isStandalone = false) {
-    let toCheck;
-    // В standalone-режиме проверяем ВСЕ записи
-    if (isStandalone) {
-        toCheck = [...db]; // копия массива
-    } else {
-        toCheck = db.filter(r => {
-            const now = new Date();
-            const nextDay = new Date(r.lastCheck);
-            nextDay.setDate(nextDay.getDate() + 2);
-
-            return nextDay >= now;
+    const now = new Date();
+    const toCheck = isStandalone 
+        ? [...db] 
+        : db.filter(record => {
+            const checkDate = new Date(record.lastCheck);
+            checkDate.setDate(checkDate.getDate() + 2);
+            return checkDate >= now;
         });
-    }
+    
     console.log(`🔎 Найдено записей для проверки: ${toCheck.length}\n`);
 
+    const sites = CSV_HEADER
+        .filter(item => isStandalone ? item.url : item.url && item.id !== 'gk')
     const recordsToRemove = new Set();
 
     for (const record of toCheck) {
         const hostPort = extractHostPort(record.subscription);
         console.log(`Проверка → ${record.country} | ${hostPort}`);
 
-        // grok.com — только в standalone-режиме
-        if (isStandalone) {
-            const gkResult = await checkSite(record.subscription, getUrlsById('gk'));
-            record.gk = gkResult.success ? String(gkResult.latency) : "0";
-            record.rating = String(parseInt(record.rating) + (gkResult.success ? 10 : -10));
-            if (gkResult.success) console.log(`   ✅ ${getUrlsById('gk')} → ${gkResult.latency} ms`);
-        } else {
-            record.gk = "0";
+        const checkPromises = sites.map(site => checkSite(record.subscription, site));
+        const checkResults = await Promise.all(checkPromises);
+ 
+        for (const item of checkResults) {
+            //if (record.hasOwnProperty(record[item.web])) continue;
+        
+            if (item.success) {
+                record.lastCheck = today;
+                record[item.web] = item.latency;
+                record.rating = parseInt(record.rating) + 30;
+                console.log(`   ✅ ${item.url} → ${item.latency} ms`);
+            } else {
+                record[item.web] = 0;
+                record.rating = parseInt(record.rating) - 10;
+                console.log(`   ❌ ${item.url} → недоступен`);
+            }
         }
-
-        // telegram.org
-        const tgResult = await checkSite(record.subscription, getUrlsById('tg'));
-        if (tgResult.success) {
-            record.lastCheck = today;
-            record.tg = String(tgResult.latency);
-            record.rating = String(parseInt(record.rating) + 30);
-            console.log(`   ✅ ${getUrlsById('tg')} → ${tgResult.latency} ms`);
-        } else {
-            record.tg = "0";
-            record.rating = String(parseInt(record.rating) - 10);
-            console.log(`   ❌ ${getUrlsById('tg')} → недоступен`);
-        }
-
-        // youtube.com
-        const ytResult = await checkSite(record.subscription, getUrlsById('yt'));
-        if (ytResult.success) {
-            record.yt = String(ytResult.latency);
-            record.rating = String(parseInt(record.rating) + 20);
-            console.log(`   ✅ ${getUrlsById('yt')} → ${ytResult.latency} ms`);
-        } else {
-            record.yt = "0";
-            record.rating = String(parseInt(record.rating) - 10);
-            console.log(`   ❌ ${getUrlsById('yt')} → недоступен`);
-        }
+        
 
         // Проверка на удаление
         if (parseInt(record.rating) < 0) {
             console.log(`   🗑 Удаление записи (от сервера нет отклика)`);
             recordsToRemove.add(hostPort);
         }
-
-        await new Promise(r => setTimeout(r, CHECK_DELAY_MS));
     }
 
     // Формируем финальную базу без удалённых записей
-    const finalDb = db.filter(record => {
-        const hp = extractHostPort(record.subscription);
-        return !recordsToRemove.has(hp);
-    });
+    const finalDb = db.filter(record => 
+        !recordsToRemove.has(extractHostPort(record.subscription))
+    );
 
     if (toCheck.length > 0) {
         await saveDatabase(finalDb);

@@ -111,12 +111,13 @@ async function main() {
 
         if (existing) {
             ratingToKeep = existing.rating;
-            gkToKeep = existing.gk;
-            tgToKeep = existing.tg;
-            ytToKeep = existing.yt;
-            if (existing.quic === sub.quic) {
+            gkToKeep = existing.grok;
+            tgToKeep = existing.telegram;
+            ytToKeep = existing.youtube;
+            if (existing.quic !== sub.quic) {
                 ratingToKeep = INITIAL_RATING / 3 * 2;
-        //        console.log("   🧲", sub.quic.padEnd(36), sub.hostPort);
+                
+         //       console.log("   🧲", sub.quic.padEnd(36), sub.hostPort);
             }
             updatedCount++;
         } else {
@@ -132,9 +133,9 @@ async function main() {
             rating: ratingToKeep,
             protocol: sub.protocol,
             country: sub.country,
-            gk: gkToKeep,
-            tg: tgToKeep,
-            yt: ytToKeep,
+            grok: gkToKeep,
+            telegram: tgToKeep,
+            youtube: ytToKeep,
             quic: sub.quic,
             subscription: sub.subscription
         };

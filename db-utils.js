@@ -1,8 +1,8 @@
 /**
  * Database and Utility functions
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.0
- * Date: 26 May 2026
+ * Version: 2.4.1
+ * Date: 28 May 2026
  */
 
 const fs = require('fs');
@@ -15,12 +15,6 @@ const {
     CSV_HEADER
 } = config;
 
-/** Выбор (уникального значения) url по id */
-function getUrlsById(id) {
-    const site = CSV_HEADER.find(item => item.id === id);
-    return site?.url || 'google.com';
-}
-
 /** Извлечение host:port из subscription */
 function extractHostPort(line) {
     try {
@@ -30,6 +24,19 @@ function extractHostPort(line) {
     } catch (e) {
         return null;
     }
+}
+
+/** Приведение ключей к заголовкам */
+function mapRecordToHeader(record, header) {
+    const mapped = {};
+    header.forEach(col => {
+        if (col.title in record) {
+            mapped[col.id] = record[col.title];
+        } else {
+            mapped[col.id] = record[col.id]; // fallback: ищем по id
+        }
+    });
+    return mapped;
 }
 
 /** Загрузка базы данных */
@@ -62,20 +69,20 @@ async function saveDatabase(records) {
             return ratingB - ratingA;
         }
         // 3. tg по возрастанию, но 0 в конец
-        const tgA = parseInt(a.tg || 0);
-        const tgB = parseInt(b.tg || 0);
+        const tgA = parseInt(a.telegram || 0);
+        const tgB = parseInt(b.telegram || 0);
         if (tgA === 0 && tgB === 0) return 0;
         if (tgA === 0) return 1;
         if (tgB === 0) return -1;
         return tgA - tgB;
     });
 
+    const recordsForCsv = records.map(r => mapRecordToHeader(r, CSV_HEADER));
     const writer = createObjectCsvWriter({ path: DB_FILE, header: CSV_HEADER });
-    await writer.writeRecords(records);
+    await writer.writeRecords(recordsForCsv);
 }
 
 module.exports = {
-    getUrlsById,
     extractHostPort,
     loadDatabase,
     saveDatabase

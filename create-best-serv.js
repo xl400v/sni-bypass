@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.0
- * Date: 26 May 2026
+ * Version: 2.4.1
+ * Date: 28 May 2026
  */
 
 const fs = require('fs');
@@ -13,29 +13,25 @@ const header = `#profile-title: 🧢 Free Rnd Serv\n` +
                `#hide-settings: 0\n\n`;
 
 function processRemark(subscription, record) {
-    let remark = subscription.split('#')[1] || 'Unknown';
+    let remark = subscription.split('#')[1] || 9000 + Math.floor(Math.random() * 1000);
 
-    // Добавляем иконки
-    let icons = [];
-    if (parseInt(record.gk || 0) > 0) icons.push('📜');
-    if (parseInt(record.tg || 0) > 0) icons.push('📰');
-    if (parseInt(record.yt || 0) > 0) icons.push('📺');
-    if (icons.length > 0) {
-        remark += ' ' + icons.join(' ');
-    }
-
-    // Замена CIDR-подстрок
-    remark = remark.replace(/(?<=%5B\*?CIDR%5D)(%20|\s)*[A-Z]{2}/g, '');
-
+    // Удаляем всё после [CIDR] или [*CIDR], включая пробелы и последующий текст
+    remark = remark.replace(/(%5B|\[)(%2A|\*)?CIDR(%5D|\])(%20|\+|\s).*$/g, '%5B%2ACIDR%5D');
     // Подсчёт флагов
     const flagMatches = remark.match(/%F0%9F%87%[A-Z0-9]{2}/g) || [];
     if (flagMatches.length > 3) {
         remark = remark.replace(/%F0%9F%87%[A-Z0-9]{2}%F0%9F%87%[A-Z0-9]{2}/g, '');
-        remark = '%F0%9F%87%AA%F0%9F%87%BA ' + remark.trim(); // EU flag
+        remark = '%F0%9F%87%AA%F0%9F%87%BA%20' + remark.trim(); // EU flag
     }
 
-    // Замена пробелов и +
-    remark = remark.replace(/ /g, '%20');
+    // Добавляем иконки
+    let icons = [];
+    if (parseInt(record.grok || 0) > 0) icons.push('📜');
+    if (parseInt(record.telegram || 0) > 0) icons.push('📰');
+    if (parseInt(record.youtube || 0) > 0) icons.push('📺');
+    if (icons.length > 0) {
+        remark += ' ' + icons.join(' ');
+    }
 
     return subscription.split('#')[0] + '#' + remark;
 }
@@ -63,9 +59,9 @@ async function createBestServFile(db, outputFile, today) {
             record.priority = hasLow ? 5 : 4;
         }
         
-        if (parseInt(record.tg) > 0) {
+        if (parseInt(record.telegram) > 0) {
             record.priority--;
-            if (parseInt(record.yt) > 0) record.priority--;
+            if (parseInt(record.youtube) > 0) record.priority--;
         }
         // Гарантируем, что priority > 0
         if (record.priority < 1) record.priority = 1;
@@ -79,7 +75,7 @@ async function createBestServFile(db, outputFile, today) {
         const hp = extractHostPort(record.subscription);
         if (!hp || seen.has(hp)) continue;
         seen.add(hp);
-        if (parseInt(record.tg) + parseInt(record.yt) > 0) finalList.push(record);
+        if (parseInt(record.telegram) + parseInt(record.youtube) > 0) finalList.push(record);
     }
 
     let content = header;

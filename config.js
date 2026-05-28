@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.0
- * Date: 26 May 2026
+ * Version: 2.4.1
+ * Date: 28 May 2026
  */
 
 const path = require('path');
@@ -13,6 +13,7 @@ module.exports = {
 
     DEFAULT_SUBSCRIPTIONS_URL: 'https://github.com/hussaroff/lte-universal-checked/raw/refs/heads/main/checked.txt',
 
+    CHECK_DELAY_MS: 2000,
     INITIAL_RATING: 150,
 
     FTP_CONFIG: {
@@ -24,7 +25,6 @@ module.exports = {
 
     XRAY_PATH: path.join(__dirname, 'node_modules', '.bin', isWindows ? 'xray.exe' : 'xray'),
     TEMP_CONFIG_PATH: 'temp-xray-config.json',
-    CHECK_DELAY_MS: 2000,
 
     CSV_HEADER: [
         { id: 'lastCheck', title: 'lastCheck' },
@@ -32,7 +32,7 @@ module.exports = {
         { id: 'protocol', title: 'protocol' },
         { id: 'country', title: 'country' },
         { id: 'gk', title: 'grok', url: 'grok.com' },
-        { id: 'tg', title: 'tg', url: 'telegram.org' },
+        { id: 'tg', title: 'telegram', url: 'telegram.org' },
         { id: 'yt', title: 'youtube', url: 'youtube.com' },
         { id: 'quic', title: 'quic' },
         { id: 'subscription', title: 'subscription' }

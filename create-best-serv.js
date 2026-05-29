@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.2
+ * Version: 2.4.3
  * Date: 29 May 2026
  */
 
@@ -13,7 +13,7 @@ const header = `#profile-title: 🧢 Free Rnd Serv\n` +
                `#hide-settings: 0\n\n`;
 
 function processRemark(subscription, record) {
-    let remark = subscription.split('#')[1] || 9000 + Math.floor(Math.random() * 1000);
+    let remark = subscription.split('#')[1] || String(9000 + Math.floor(Math.random() * 1000));
 
     // Удаляем всё после [CIDR] или [*CIDR], включая пробелы и последующий текст
     remark = remark.replace(/(%5B|\[)(%2A|\*)?CIDR(%5D|\])(%20|\+|\s).*$/g, '%5B%2ACIDR%5D');

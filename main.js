@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.2
+ * Version: 2.4.3
  * Date: 29 May 2026
  */
 
@@ -149,9 +149,9 @@ async function main() {
     await saveDatabase(db);
 
     console.log(`\n📊 Итоги обработки:`);
-    console.log(`   Новых: ${newCount}`);
-    console.log(`   Обновлено: ${updatedCount}`);
-    console.log(`   Всего в базе: ${db.length}`);
+    console.log(`   Найдено:         ${updatedCount}`);
+    console.log(`   Добавлено новых: ${newCount}`);
+    console.log(`   Всего в базе:    ${db.length}`);
 
     if (verifyMode || fullVerifyMode) {
         if (fullVerifyMode) fullVerifyMode === true;
@@ -160,7 +160,7 @@ async function main() {
             console.log('🚀 Запуск проверки telegram.org | youtube.com...\n');
             await verifyAccess(db, today, fullVerifyMode);
         } catch (err) {
-            console.error('❌ Ошибка при выполнении проверки:', err.message);
+            console.error('❌ Ошибка при выполнении проверки:\n', err);
         }
     }
 
@@ -177,8 +177,8 @@ async function main() {
             console.log(` 🗑 Файл ${OUTPUT_FILE} удалён`);
         }
     } catch (err) {
-        console.error('❌ Ошибка при создании best-serv или загрузке по ftp:', err.message);
+        console.error('❌ Ошибка при создании best-serv или загрузке по ftp:\n', err);
     }
 }
 
-main().catch(err => console.error('💥 Ошибка main.js:', err));
+main().catch(err => console.error('💥 Ошибка main.js:\n', err));

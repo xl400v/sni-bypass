@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.2
+ * Version: 2.4.3
  * Date: 29 May 2026
  * 
  * Запуск: npm run check   или   node verify-access.js
@@ -14,13 +14,18 @@ const { loadDatabase, saveDatabase, extractHostPort } = require('./db-utils');
 const { 
     XRAY_PATH, 
     TEMP_CONFIG_PATH, 
-    CSV_HEADER,
-    CHECK_DELAY_MS
+    CHECK_DELAY_MS,
+    CHECK_TIMEOUT_MS,
+    MAX_CONCURRENT,
+    INITIAL_RATING,
+    CSV_HEADER
 } = config;
 
-// ====================== УТИЛИТЫ ======================
+// ====================== XRAY CONFIG ======================
 
 function createXrayConfig(parsed) {
+    const isGrpc = parsed.type === 'grpc';
+
     return {
         log: { loglevel: "none" },
         inbounds: [{ 
@@ -37,14 +42,19 @@ function createXrayConfig(parsed) {
                     port: parsed.port, 
                     users: [{ 
                         id: parsed.uuid, 
-                        encryption: "none", 
-                        flow: parsed.flow 
+                        encryption: "none",
+                        flow: parsed.flow || ""
                     }] 
                 }] 
             },
             streamSettings: {
-                network: parsed.type,
-                security: parsed.security,
+                network: parsed.type || "tcp",
+                security: parsed.security || "reality",
+                ...(isGrpc && {
+                    grpcSettings: {
+                        serviceName: parsed.serviceName || ""
+                    }
+                }),
                 realitySettings: {
                     serverName: parsed.sni,
                     fingerprint: parsed.fp,
@@ -60,6 +70,7 @@ function createXrayConfig(parsed) {
 function parseVlessSubscription(line) {
     try {
         const url = new URL(line.split('#')[0]);
+
         return {
             uuid: url.username,
             host: url.hostname,
@@ -70,51 +81,60 @@ function parseVlessSubscription(line) {
             fp: url.searchParams.get('fp') || 'chrome',
             flow: url.searchParams.get('flow') || '',
             sid: url.searchParams.get('sid') || '',
-            pbk: url.searchParams.get('pbk') || ''
+            pbk: url.searchParams.get('pbk') || '',
+            serviceName: url.searchParams.get('serviceName') || ''
         };
     } catch (err) {
         return null;
     }
 }
 
+// ====================== CHECK SITE ======================
+
 async function checkSite(subscription, site) {
     const proc = spawn(XRAY_PATH, ['run', '-c', TEMP_CONFIG_PATH], { 
         stdio: ['ignore', 'ignore', 'pipe'] 
     });
+
     const parsed = parseVlessSubscription(subscription);
-    const cfg = createXrayConfig(parsed);
     if (!parsed) {
-        return { web: site.title, url: site.url, success: 0, latency: 0 };
+        proc.kill();
+        return { web: site.title, url: site.url, success: 0, latency: delay };
     }
+
+    const cfg = createXrayConfig(parsed);
     fs.writeFileSync(TEMP_CONFIG_PATH, JSON.stringify(cfg, null, 2));
 
     return new Promise((resolve) => {
-        const start = Date.now();
+        const timeoutId = setTimeout(() => proc.kill(), CHECK_TIMEOUT_MS);
 
         setTimeout(async () => {
+            const start = Date.now();
             try {
                 const { execSync } = require('child_process');
                 const output = execSync(
-                    `curl -I -s --socks5 127.0.0.1:1080 ` +
-                    `--max-time ${9 + (site.id === 'yt' ? -1 : -3)} https://${site.url}`,
-                    { timeout: CHECK_DELAY_MS * 4 }
+                    `curl -I -s --socks5 127.0.0.1:1080 --max-time ${Math.floor(CHECK_TIMEOUT_MS / 1000) - 1} https://${site.url}`,
+                    { timeout: CHECK_TIMEOUT_MS }
                 ).toString();
 
                 const success = output.includes('HTTP/') || output.includes('200');
-                const latency = Date.now() - start;
+                const delay = Date.now() - start;
 
                 proc.kill();
-                resolve({ web: site.title, url: site.url, success: success ? 1 : 0, latency });
+                clearTimeout(timeoutId);
+                resolve({ web: site.title, url: site.url, success: success ?? 0, latency: delay });
             } catch (err) {
                 proc.kill();
+                clearTimeout(timeoutId);
                 resolve({ web: site.title, url: site.url, success: 0, latency: 0 });
             }
         }, CHECK_DELAY_MS);
     });
 }
 
-/** Параллельная проверка с лимитом */
-async function checkAllSites(records, sites, today) {
+// ====================== WORKER ======================
+
+async function checkAllSites(records, today, isStandalone) {
     const results = [];
     const queue = [...records];
 
@@ -122,39 +142,38 @@ async function checkAllSites(records, sites, today) {
         while (queue.length > 0) {
             const record = queue.shift();
             const hostPort = extractHostPort(record.subscription);
-            //console.log(`Проверка → ${record.country} | ${hostPort}`);
 
-            const checkPromises = sites.map(site => checkSite(record.subscription, site));
+            let sitesToCheck = CSV_HEADER
+                .filter(item => isStandalone ? item.url : item.url && item.id !== 'gk');
+
+            const checkPromises = sitesToCheck.map(site => checkSite(record.subscription, site));
             const checkResults = await Promise.all(checkPromises);
 
             for (const item of checkResults) {
-                //if (record.hasOwnProperty(record[item.web])) continue;
-            
                 if (item.success) {
-                    record.lastCheck = today;
-                    record[item.web] = item.latency;
-                    record.rating = parseInt(record.rating) + 30;
+                    record[item.web] = String(item.latency);
+                    record.rating = String(parseInt(record.rating || 0) + 30);
                     console.log(`   ✅ ${item.url} → ${item.latency} ms`);
                 } else {
-                    record[item.web] = 0;
-                    record.rating = parseInt(record.rating) - 10;
-                    console.log(`   ❌ ${item.url} → недоступен`);
+                    record[item.web] = "0";
+                    record.rating = String(parseInt(record.rating || 0) - 10);
+                    console.log(`   ❌ ${item.url} → fail`);
                 }
             }
 
-            console.log(`Проверено → ${record.country} | ${hostPort}`);
+            record.lastCheck = today;
             results.push(record);
+            console.log(`Проверено → ${record.country} | ${hostPort}`);
         }
     }
 
-    // Запускаем workers
-    const workers = Array.from({ length: 4 }, () => worker());
+    const workers = Array.from({ length: MAX_CONCURRENT }, () => worker());
     await Promise.all(workers);
 
     return results;
 }
 
-// ====================== MAIN LOGIC ======================
+// ====================== MAIN ======================
 
 async function verifyAccess(db, today, isStandalone = false) {
     const now = new Date();
@@ -169,41 +188,24 @@ async function verifyAccess(db, today, isStandalone = false) {
     if (toCheck.length === 0) {
         console.log(`\nℹ️ Нет записей для проверки.\n`);
         return;
-    } else {
-        console.log(`🔎 Найдено записей для проверки: ${toCheck.length}\n`);
     }
 
-    const sites = CSV_HEADER
-        .filter(item => isStandalone ? item.url : item.url && item.id !== 'gk');
-
-    try {
-        const checkedRecords = await checkAllSites(toCheck, sites, today);
-        const recordsToRemove = new Set();
-
-        for (const record of checkedRecords) {
-            // Проверка на удаление
-            if (parseInt(record.rating) < 0) {
-                console.log(`   🗑 Удаление записи (от сервера нет отклика)`);
-                recordsToRemove.add(extractHostPort(record.subscription));
-            }
+    console.log(`🔎 Запущена проверка ${toCheck.length} серверов в ${MAX_CONCURRENT} потоках.`);
+    const checkedRecords = await checkAllSites(toCheck, today, isStandalone);
+    const recordsToRemove = new Set();
+    for (const record of checkedRecords) {
+        if (parseInt(record.rating) < 0) {
+            console.log(`   🗑 Удаление записи (от сервера нет отклика)`);
+            recordsToRemove.add(extractHostPort(record.subscription));
         }
+    }
 
-        // Формируем финальную базу без удалённых записей
-        const finalDb = db.filter(record => 
-            !recordsToRemove.has(extractHostPort(record.subscription))
-        );
+    const finalDb = db.filter(r => !recordsToRemove.has(extractHostPort(r.subscription)));
 
-        if (finalDb.length > 0) {
-            await saveDatabase(finalDb);
-            await fs.promises.unlink(TEMP_CONFIG_PATH).catch(err => void 0);
-            
-            console.log(`\n✅ Проверка завершена.`);
-            console.log(`   Проверено записей: ${finalDb.length}`);
-            console.log(`   Удалено записей (нет отклика от серверов): ${recordsToRemove.size}`);
-        } else {
-            console.log(`\nℹ️ Нет записей для проверки.`);
-        }
-    } catch (err) {}
+    await saveDatabase(finalDb);
+    await fs.promises.unlink(TEMP_CONFIG_PATH).catch(() => {});
+
+    console.log(`\n✅ Проверка завершена.\n   Осталось записей: ${finalDb.length}\n   Удалено записей: ${recordsToRemove.size}`);
 }
 
 // ====================== EXECUTION ======================
@@ -217,7 +219,7 @@ if (require.main === module) {
             const today = new Date().toISOString().split('T')[0];
             await verifyAccess(db, today, true);
         } catch (err) {
-            console.error('💥 Ошибка verify-access.js:', err.message);
+            console.error('💥 Ошибка verify-access.js:\n', err);
             process.exit(1);
         }
     })();

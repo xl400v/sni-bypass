@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.1
- * Date: 28 May 2026
+ * Version: 2.4.3
+ * Date: 29 May 2026
  */
 
 const path = require('path');
@@ -13,7 +13,10 @@ module.exports = {
 
     DEFAULT_SUBSCRIPTIONS_URL: 'https://github.com/hussaroff/lte-universal-checked/raw/refs/heads/main/checked.txt',
 
-    CHECK_DELAY_MS: 2000,
+    CHECK_DELAY_MS: 1800,        // ← уменьшил с 2000
+    CHECK_TIMEOUT_MS: 8500,      // ← новый глобальный таймаут для curl
+    MAX_CONCURRENT: 6,           // ← добавил контроль concurrency
+
     INITIAL_RATING: 150,
 
     FTP_CONFIG: {

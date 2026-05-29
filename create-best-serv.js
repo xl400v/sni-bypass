@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.1
- * Date: 28 May 2026
+ * Version: 2.4.2
+ * Date: 29 May 2026
  */
 
 const fs = require('fs');
@@ -49,7 +49,7 @@ async function createBestServFile(db, outputFile, today) {
 
     for (const record of tempList) {
         const remarkLower = (record.subscription || '').toLowerCase();
-        const hasLow = /\b(hysteria|vpn|xhttp)\b/i.test(remarkLower);
+        const hasLow = /\b(grpc|hysteria|vpn|xhttp)\b/i.test(remarkLower);
 
         // Приоритет 1 — только для ПЕРВОГО подходящего RU сервера
         if (record.country === 'RU' && !hasLow) {
@@ -83,7 +83,7 @@ async function createBestServFile(db, outputFile, today) {
         .sort((a, b) => a.priority - b.priority)
         .forEach(r => content += processRemark(r.subscription, r) + '\n');
     
-    const best = finalList.slice(0, 6);
+    const best = finalList.slice(0, 7);
     const timeForFooter = new Date().toISOString().slice(0, 16).replace('T', ' ');
     // Специальная последняя строка с fm-параметром
     const fmParam = 'fm=%7B%22tcp%22%3A%5B%7B%22type%22%3A%22grok%20-%20%F0%9F%93%9C%2C%20tg%20-%20%F0%9F%93%B0%2C%20youtube%20-%20%F0%9F%93%BA%22%7D%5D%7D&';

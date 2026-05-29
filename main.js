@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.0
- * Date: 26 May 2026
+ * Version: 2.4.2
+ * Date: 29 May 2026
  */
 
 const fs = require('fs');
@@ -47,8 +47,9 @@ function parseSubscription(line) {
         let protoType = '';
         if (protocolRaw === 'HYSTERIA2') protoType = 'HYSTERIA2+TLS';
         else if (protocolRaw === 'VLESS' && security === 'reality') {
-            if (type === 'tcp') protoType = 'VLESS+TCP+REALITY';
-            else if (type === 'xhttp') protoType = 'VLESS+XHTTP+REALITY';
+            if (type === 'xhttp') protoType = 'VLESS+XHTTP+REALITY';
+            else if (type === 'grpc') protoType = 'VLESS+GRPC+REALITY';
+            else protoType = 'VLESS+TCP+REALITY';
         }
 
         if (!protoType || fragment || sni.toLowerCase().includes('max.ru')) return null;
@@ -62,7 +63,7 @@ function parseSubscription(line) {
             protocol: protoType,
             country: getCountry(remark)
         };
-    } catch (e) {
+    } catch (err) {
         return null;
     }
 }
@@ -71,7 +72,8 @@ function parseSubscription(line) {
 
 async function main() {
     const args = process.argv.slice(2);
-    const verifyMode = args.includes('--verify') || args.includes('-c');
+    const verifyMode = args.includes('-c');
+    const fullVerifyMode = args.includes('--verify') || args.includes('-v');
     const customUrl = args.find(arg => arg.startsWith('http'));
 
     const url = customUrl || DEFAULT_SUBSCRIPTIONS_URL;
@@ -83,7 +85,7 @@ async function main() {
     try {
         const res = await fetch(url);
         text = await res.text();
-    } catch (e) {
+    } catch (err) {
         console.error('❌ Нет доступа к файлу подписок.');
         process.exit(1);
     }
@@ -117,7 +119,7 @@ async function main() {
             if (existing.quic !== sub.quic) {
                 ratingToKeep = INITIAL_RATING / 3 * 2;
                 
-         //       console.log("   🧲", sub.quic.padEnd(36), sub.hostPort);
+        //       console.log("   🧲", sub.quic.padEnd(36), sub.hostPort);
             }
             updatedCount++;
         } else {
@@ -151,13 +153,14 @@ async function main() {
     console.log(`   Обновлено: ${updatedCount}`);
     console.log(`   Всего в базе: ${db.length}`);
 
-    if (verifyMode) {
+    if (verifyMode || fullVerifyMode) {
+        if (fullVerifyMode) fullVerifyMode === true;
         try {
             const { verifyAccess } = require('./verify-access.js');
             console.log('🚀 Запуск проверки telegram.org | youtube.com...\n');
-            await verifyAccess(db, today);
-        } catch (e) {
-            console.error('❌ Ошибка при выполнении проверки:', e.message);
+            await verifyAccess(db, today, fullVerifyMode);
+        } catch (err) {
+            console.error('❌ Ошибка при выполнении проверки:', err.message);
         }
     }
 

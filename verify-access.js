@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.1
- * Date: 28 May 2026
+ * Version: 2.4.2
+ * Date: 29 May 2026
  * 
  * Запуск: npm run check   или   node verify-access.js
  */
@@ -72,7 +72,7 @@ function parseVlessSubscription(line) {
             sid: url.searchParams.get('sid') || '',
             pbk: url.searchParams.get('pbk') || ''
         };
-    } catch (e) {
+    } catch (err) {
         return null;
     }
 }
@@ -96,7 +96,7 @@ async function checkSite(subscription, site) {
                 const { execSync } = require('child_process');
                 const output = execSync(
                     `curl -I -s --socks5 127.0.0.1:1080 ` +
-                    `--max-time ${8 + (site.id === 'yt' ? -1 : -3)} https://${site.url}`,
+                    `--max-time ${9 + (site.id === 'yt' ? -1 : -3)} https://${site.url}`,
                     { timeout: CHECK_DELAY_MS * 4 }
                 ).toString();
 
@@ -113,6 +113,47 @@ async function checkSite(subscription, site) {
     });
 }
 
+/** Параллельная проверка с лимитом */
+async function checkAllSites(records, sites, today) {
+    const results = [];
+    const queue = [...records];
+
+    async function worker() {
+        while (queue.length > 0) {
+            const record = queue.shift();
+            const hostPort = extractHostPort(record.subscription);
+            //console.log(`Проверка → ${record.country} | ${hostPort}`);
+
+            const checkPromises = sites.map(site => checkSite(record.subscription, site));
+            const checkResults = await Promise.all(checkPromises);
+
+            for (const item of checkResults) {
+                //if (record.hasOwnProperty(record[item.web])) continue;
+            
+                if (item.success) {
+                    record.lastCheck = today;
+                    record[item.web] = item.latency;
+                    record.rating = parseInt(record.rating) + 30;
+                    console.log(`   ✅ ${item.url} → ${item.latency} ms`);
+                } else {
+                    record[item.web] = 0;
+                    record.rating = parseInt(record.rating) - 10;
+                    console.log(`   ❌ ${item.url} → недоступен`);
+                }
+            }
+
+            console.log(`Проверено → ${record.country} | ${hostPort}`);
+            results.push(record);
+        }
+    }
+
+    // Запускаем workers
+    const workers = Array.from({ length: 4 }, () => worker());
+    await Promise.all(workers);
+
+    return results;
+}
+
 // ====================== MAIN LOGIC ======================
 
 async function verifyAccess(db, today, isStandalone = false) {
@@ -124,60 +165,45 @@ async function verifyAccess(db, today, isStandalone = false) {
             checkDate.setDate(checkDate.getDate() + 2);
             return checkDate >= now;
         });
-    
-    console.log(`🔎 Найдено записей для проверки: ${toCheck.length}\n`);
+
+    if (toCheck.length === 0) {
+        console.log(`\nℹ️ Нет записей для проверки.\n`);
+        return;
+    } else {
+        console.log(`🔎 Найдено записей для проверки: ${toCheck.length}\n`);
+    }
 
     const sites = CSV_HEADER
-        .filter(item => isStandalone ? item.url : item.url && item.id !== 'gk')
-    const recordsToRemove = new Set();
+        .filter(item => isStandalone ? item.url : item.url && item.id !== 'gk');
 
-    for (const record of toCheck) {
-        const hostPort = extractHostPort(record.subscription);
-        console.log(`Проверка → ${record.country} | ${hostPort}`);
+    try {
+        const checkedRecords = await checkAllSites(toCheck, sites, today);
+        const recordsToRemove = new Set();
 
-        const checkPromises = sites.map(site => checkSite(record.subscription, site));
-        const checkResults = await Promise.all(checkPromises);
- 
-        for (const item of checkResults) {
-            //if (record.hasOwnProperty(record[item.web])) continue;
-        
-            if (item.success) {
-                record.lastCheck = today;
-                record[item.web] = item.latency;
-                record.rating = parseInt(record.rating) + 30;
-                console.log(`   ✅ ${item.url} → ${item.latency} ms`);
-            } else {
-                record[item.web] = 0;
-                record.rating = parseInt(record.rating) - 10;
-                console.log(`   ❌ ${item.url} → недоступен`);
+        for (const record of checkedRecords) {
+            // Проверка на удаление
+            if (parseInt(record.rating) < 0) {
+                console.log(`   🗑 Удаление записи (от сервера нет отклика)`);
+                recordsToRemove.add(extractHostPort(record.subscription));
             }
         }
-        
 
-        // Проверка на удаление
-        if (parseInt(record.rating) < 0) {
-            console.log(`   🗑 Удаление записи (от сервера нет отклика)`);
-            recordsToRemove.add(hostPort);
+        // Формируем финальную базу без удалённых записей
+        const finalDb = db.filter(record => 
+            !recordsToRemove.has(extractHostPort(record.subscription))
+        );
+
+        if (finalDb.length > 0) {
+            await saveDatabase(finalDb);
+            await fs.promises.unlink(TEMP_CONFIG_PATH).catch(err => void 0);
+            
+            console.log(`\n✅ Проверка завершена.`);
+            console.log(`   Проверено записей: ${finalDb.length}`);
+            console.log(`   Удалено записей (нет отклика от серверов): ${recordsToRemove.size}`);
+        } else {
+            console.log(`\nℹ️ Нет записей для проверки.`);
         }
-    }
-
-    // Формируем финальную базу без удалённых записей
-    const finalDb = db.filter(record => 
-        !recordsToRemove.has(extractHostPort(record.subscription))
-    );
-
-    if (toCheck.length > 0) {
-        await saveDatabase(finalDb);
-        try { 
-            await fs.promises.unlink(TEMP_CONFIG_PATH).catch(() => {}); 
-        } catch (e) {}
-
-        console.log(`\n✅ Проверка завершена.`);
-        console.log(`   Проверено записей: ${toCheck.length}`);
-        console.log(`   Удалено записей (нет отклика от серверов): ${recordsToRemove.size}`);
-    } else {
-        console.log(`\nℹ️ Нет записей для проверки.`);
-    }
+    } catch (err) {}
 }
 
 // ====================== EXECUTION ======================

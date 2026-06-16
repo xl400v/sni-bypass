@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.6
+ * Version: 2.4.7
  * Date: 16 June 2026
  */
 
@@ -14,7 +14,7 @@ module.exports = {
     DEFAULT_SUBSCRIPTIONS_URL: 'https://github.com/zieng2/wl/raw/refs/heads/main/vless_lite.txt',
 
     CHECK_DELAY_MS: 1800,        // ← уменьшил с 2000
-    CHECK_TIMEOUT_MS: 11000,      // ← новый глобальный таймаут для curl
+    CHECK_TIMEOUT_MS: 15000,      // ← новый глобальный таймаут для curl
     MAX_CONCURRENT: 4,           // ← добавил контроль concurrency
 
     INITIAL_RATING: 150,

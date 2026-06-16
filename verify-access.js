@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.6
+ * Version: 2.4.7
  * Date: 16 June 2026
  * 
  * Запуск: npm run check   или   node verify-access.js
@@ -9,15 +9,11 @@
 const fs = require('fs');
 const { spawn } = require('child_process');
 const config = require('./config');
-const { 
-    loadDatabase, 
-    saveDatabase, 
-    extractHostPort 
-} = require('./db-utils');
+const { loadDatabase, saveDatabase, extractHostPort } = require('./db-utils');
 
 const { 
-    XRAY_PATH, 
-    TEMP_CONFIG_PATH, 
+    XRAY_PATH,
+    TEMP_CONFIG_PATH,
     CHECK_DELAY_MS,
     CHECK_TIMEOUT_MS,
     MAX_CONCURRENT,
@@ -101,15 +97,12 @@ async function checkSite(subscription, site, retries = 2) {
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
             const parsed = parseVlessSubscription(subscription);
-            if (!parsed) {
-                return { web: site.title, url: site.url, success: false, latency: 0 };
-            }
+            if (!parsed) return { web: site.title, url: site.url, success: false, latency: 0 };
 
             const cfg = createXrayConfig(parsed);
             if (!cfg) return { web: site.title, url: site.url, success: false, latency: 0 };
 
             fs.writeFileSync(TEMP_CONFIG_PATH, JSON.stringify(cfg, null, 2));
-
             proc = spawn(XRAY_PATH, ['run', '-c', TEMP_CONFIG_PATH], { 
                 stdio: ['ignore', 'ignore', 'pipe'] 
             });
@@ -141,7 +134,7 @@ async function checkSite(subscription, site, retries = 2) {
             if (attempt === retries) {
                 return { web: site.title, url: site.url, success: false, latency: 0 };
             }
-            await new Promise(r => setTimeout(r, CHECK_DELAY_MS / 2)); // small delay between retries
+            await new Promise(r => setTimeout(r, CHECK_DELAY_MS / 2));
         } finally {
             if (proc) {
                 try { proc.kill('SIGKILL'); } catch (_) {}
@@ -151,11 +144,20 @@ async function checkSite(subscription, site, retries = 2) {
     }
 }
 
-// ====================== CHECK ALL ======================
+// ====================== CHECK ALL SITES (с приоритетом новых) ======================
 
 async function checkAllSites(records, today, isStandalone = false) {
     const results = [];
-    const queue = [...records];
+    // Сортируем: новые subscription (с более свежим lastCheck или без) — первыми
+    const sortedRecords = [...records].sort((a, b) => {
+        const aIsNew = !a.lastCheck || a.lastCheck === today;
+        const bIsNew = !b.lastCheck || b.lastCheck === today;
+        if (aIsNew && !bIsNew) return -1;
+        if (!aIsNew && bIsNew) return 1;
+        return 0;
+    });
+
+    const queue = sortedRecords;
 
     async function worker() {
         while (queue.length > 0) {
@@ -179,13 +181,12 @@ async function checkAllSites(records, today, isStandalone = false) {
                     hasSuccess = true;
                 } else {
                     const current = parseInt(record[item.web] || 0);
-                    record[item.web] = Math.floor(current * 1.2);
+                    record[item.web] = String(Math.floor(current * 1.2));
                     record.rating = String(parseInt(record.rating || INITIAL_RATING) - 10);
                     console.log(`   ❌ ${item.url} → fail`);
                 }
             }
 
-            // Записываем дату и результаты ТОЛЬКО если был успешный отклик
             if (hasSuccess) {
                 record.lastCheck = today;
             }
@@ -223,7 +224,6 @@ async function verifyAccess(db, today, isStandalone = false) {
     const recordsToRemove = new Set();
     for (const record of checkedRecords) {
         if (parseInt(record.rating) < 0) {
-            console.log(`   🗑 Удаление записи (от сервера нет отклика)`);
             recordsToRemove.add(extractHostPort(record.subscription));
         }
     }
@@ -232,7 +232,6 @@ async function verifyAccess(db, today, isStandalone = false) {
 
     await saveDatabase(finalDb);
     await fs.promises.unlink(TEMP_CONFIG_PATH).catch(() => {});
-
     console.info(`\n✅ Проверка завершена.\n   Осталось записей: ${finalDb.length}\n   Удалено: ${recordsToRemove.size}`);
 }
 

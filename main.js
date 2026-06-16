@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.6
+ * Version: 2.4.7
  * Date: 16 June 2026
  */
 
@@ -31,7 +31,6 @@ function getCountry(remark) {
     return 'EU';
 }
 
-/** Основная функция парсинга (объединённая и улучшенная) */
 function parseSubscription(line) {
     try {
         if (!line || line.startsWith('#')) return null;
@@ -82,90 +81,92 @@ async function main() {
     console.log(`🚀 Запуск обработки серверов...`);
     console.log(`   Источник: ${url}`);
 
-    let text;
+    let text = '';
+    let hasNewSubscriptions = false;
+
     try {
         const res = await fetch(url);
         text = await res.text();
+        hasNewSubscriptions = true;
     } catch (err) {
-        console.error('❌ Нет доступа к файлу подписок.');
-        process.exit(1);
+        console.warn('⚠️  Нет доступа к файлу подписок. Будет выполнена проверка существующих записей в базе.');
     }
 
-    const newSubscriptions = text.split('\n').map(parseSubscription).filter(Boolean);
-    console.log(`✅ Отфильтровано серверов из источника: ${newSubscriptions.length}`);
+    let newSubscriptions = [];
+    if (hasNewSubscriptions) {
+        newSubscriptions = text.split('\n').map(parseSubscription).filter(Boolean);
+        console.log(`✅ Отфильтровано серверов из источника: ${newSubscriptions.length}`);
+    }
 
     let newCount = 0, updatedCount = 0;
     let db = await loadDatabase();
     const today = new Date().toISOString().split('T')[0];
-    const dbMap = new Map(
-        db.map(record => [extractHostPort(record.subscription), record])
-    );
 
-    for (const sub of newSubscriptions) {
-        if (!sub.quic) continue;
+    const dbMap = new Map(db.map(record => [extractHostPort(record.subscription), record]));
 
-        let gkToKeep = 0, tgToKeep = 0, ytToKeep = 0;
-        let ratingToKeep = parseInt(INITIAL_RATING, 10);
-        // Проверка дедубликации
-        let existing = [...dbMap.values()].find(r => {
-            const hp = extractHostPort(r.subscription);
-            return hp === sub.hostPort || r.quic === sub.quic
-        });
+    if (hasNewSubscriptions) {
+        for (const sub of newSubscriptions) {
+            if (!sub.quic) continue;
 
-        if (existing) {
-            ratingToKeep = existing.rating;
-            gkToKeep = existing.grok;
-            tgToKeep = existing.telegram;
-            ytToKeep = existing.youtube;
-            if (existing.quic !== sub.quic) {
-                ratingToKeep = Math.floor(INITIAL_RATING / 3 * 2);
-                
-        //       console.log("   🧲", sub.quic.padEnd(36), sub.hostPort);
+            const hostPort = sub.hostPort;
+            const existing = dbMap.get(hostPort); // ← строго по host:port
+
+            let gkToKeep = "0", tgToKeep = "0", ytToKeep = "0";
+            let ratingToKeep = parseInt(INITIAL_RATING, 10);
+
+            if (existing) {
+                if (existing.quic !== sub.quic) {
+                    ratingToKeep = Math.floor(INITIAL_RATING / 3 * 2);
+                } else {
+                    ratingToKeep = parseInt(existing.rating || INITIAL_RATING / 3 * 2);
+                    console.log(`🔄 Обновлена запись ${hostPort}`);
+                }
+
+                gkToKeep = existing.grok;
+                tgToKeep = existing.telegram;
+                ytToKeep = existing.youtube;
+                updatedCount++;
+            } else {
+                newCount++;
             }
-            updatedCount++;
-        } else {
-            const quics = newSubscriptions.filter(i => i.quic === sub.quic);
-            if (quics.length > 1) ratingToKeep = Math.floor(INITIAL_RATING / 3 * 2);
-            
-        //    console.log(`   ${quics.length} `, sub.quic.padEnd(36), sub.hostPort);
-            newCount++;
+
+            const record = {
+                lastCheck: existing ? existing.lastCheck : today,
+                rating: ratingToKeep,
+                protocol: sub.protocol,
+                country: sub.country,
+                grok: gkToKeep || "0",
+                telegram: tgToKeep || "0",
+                youtube: ytToKeep || "0",
+                quic: sub.quic,
+                subscription: sub.subscription
+            };
+
+            dbMap.set(hostPort, record);
         }
-
-        const record = {
-            lastCheck: existing ? existing.lastCheck : today,
-            rating: ratingToKeep,
-            protocol: sub.protocol,
-            country: sub.country,
-            grok: gkToKeep || 0,
-            telegram: tgToKeep || 0,
-            youtube: ytToKeep || 0,
-            quic: sub.quic,
-            subscription: sub.subscription
-        };
-
-        dbMap.set(sub.hostPort, record);
     }
 
     db = Array.from(dbMap.values());
     await saveDatabase(db);
 
     console.log(`\n📊 Итоги обработки:`);
-    console.log(`   Найдено:         ${updatedCount}`);
+    console.log(`   Обновлено:       ${updatedCount}`);
     console.log(`   Добавлено новых: ${newCount}`);
     console.log(`   Всего в базе:    ${db.length}`);
 
+    // Проверка
     if (verifyMode || fullVerifyMode) {
-        if (fullVerifyMode) fullVerifyMode === true;
         try {
             const { verifyAccess } = require('./verify-access.js');
             console.log(`🚀 Запуск проверки ${CSV_HEADER.find(item => item.id === 'tg').url}...\n`);
-            await verifyAccess(db, today, fullVerifyMode);
+            // Если подписок не было — проверяем только базу
+            await verifyAccess(db, today, fullVerifyMode && hasNewSubscriptions);
         } catch (err) {
-            console.error('❌ Ошибка при выполнении проверки:\n', err);
+            console.error('❌ Ошибка при выполнении проверки:', err);
         }
     }
 
-    // Создание best-serv и FTP (без изменений)
+    // Создание best-serv и FTP
     try {
         const { createBestServFile } = require('./create-best-serv.js');
         await createBestServFile(db, OUTPUT_FILE, today);
@@ -182,4 +183,4 @@ async function main() {
     }
 }
 
-main().catch(err => console.error('💥 Ошибка main.js:\n', err));
+main().catch(err => console.error('💥 Ошибка main.js:', err));

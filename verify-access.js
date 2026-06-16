@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.4
- * Date: 08 June 2026
+ * Version: 2.4.5
+ * Date: 16 June 2026
  * 
  * Запуск: npm run check   или   node verify-access.js
  */
@@ -9,7 +9,11 @@
 const fs = require('fs');
 const { spawn } = require('child_process');
 const config = require('./config');
-const { loadDatabase, saveDatabase, extractHostPort } = require('./db-utils');
+const { 
+    loadDatabase, 
+    saveDatabase, 
+    extractHostPort 
+} = require('./db-utils');
 
 const { 
     XRAY_PATH, 
@@ -40,97 +44,114 @@ function parseVlessSubscription(line) {
             serviceName: url.searchParams.get('serviceName') || ''
         };
     } catch (err) {
+        console.error(`❌ Parse error: ${err.message}`);
         return null;
     }
 }
 
 function createXrayConfig(parsed) {
-    const isGrpc = parsed.type === 'grpc';
-    return {
-        log: { loglevel: "none" },
-        inbounds: [{ 
-            port: 1080, 
-            protocol: "socks", 
-            settings: { udp: true }, 
-            listen: "127.0.0.1" 
-        }],
-        outbounds: [{
-            protocol: "vless",
-            settings: { 
-                vnext: [{ 
-                    address: parsed.host, 
-                    port: parsed.port, 
-                    users: [{ 
-                        id: parsed.uuid, 
-                        encryption: "none",
-                        flow: parsed.flow || ""
-                    }] 
-                }] 
-            },
-            streamSettings: {
-                network: parsed.type || "tcp",
-                security: parsed.security || "reality",
-                ...(isGrpc && {
-                    grpcSettings: {
-                        serviceName: parsed.serviceName || "gun"
-                    }
-                }),
-                realitySettings: isGrpc ? undefined : {
-                    serverName: parsed.sni,
-                    fingerprint: parsed.fp,
-                    shortId: parsed.sid,
-                    publicKey: parsed.pbk
-                }
-            }
-        }]
-    };
-}
-
-// ====================== CHECK SITE ======================
-
-async function checkSite(subscription, site) {
-    let proc = null;
     try {
-        const parsed = parseVlessSubscription(subscription);
-        if (!parsed) {
-            return { web: site.title, url: site.url, success: false, latency: 0 };
-        }
-
-        const cfg = createXrayConfig(parsed);
-        fs.writeFileSync(TEMP_CONFIG_PATH, JSON.stringify(cfg, null, 2));
-
-        proc = spawn(XRAY_PATH, ['run', '-c', TEMP_CONFIG_PATH], { 
-            stdio: ['ignore', 'ignore', 'pipe'] 
-        });
-
-        await new Promise(r => setTimeout(r, CHECK_DELAY_MS));
-
-        const start = Date.now();
-        const output = await new Promise((resolve, reject) => {
-            const t = setTimeout(() => reject(new Error('timeout')), CHECK_TIMEOUT_MS);
-            try {
-                const { execSync } = require('child_process');
-                const res = execSync(`curl -I -s --socks5 127.0.0.1:1080 --max-time 8 https://${site.url}`, 
-                    { timeout: CHECK_TIMEOUT_MS }).toString();
-                clearTimeout(t);
-                resolve(res);
-            } catch (e) {
-                clearTimeout(t);
-                reject(e);
-            }
-        });
-
-        const success = output.includes('HTTP/') || output.includes('200') || output.length > 20;
-        return { web: site.title, url: site.url, success, latency: Date.now() - start };
+        const isGrpc = parsed.type === 'grpc';
+        return {
+            log: { loglevel: "none" },
+            inbounds: [{ 
+                port: 1080, 
+                protocol: "socks", 
+                settings: { udp: true }, 
+                listen: "127.0.0.1" 
+            }],
+            outbounds: [{
+                protocol: "vless",
+                settings: { 
+                    vnext: [{ 
+                        address: parsed.host, 
+                        port: parsed.port, 
+                        users: [{ 
+                            id: parsed.uuid, 
+                            encryption: "none",
+                            flow: parsed.flow || ""
+                        }] 
+                    }] 
+                },
+                streamSettings: {
+                    network: parsed.type || "tcp",
+                    security: parsed.security || "reality",
+                    ...(isGrpc && {
+                        grpcSettings: { serviceName: parsed.serviceName || "gun" }
+                    }),
+                    realitySettings: isGrpc ? undefined : {
+                        serverName: parsed.sni,
+                        fingerprint: parsed.fp,
+                        shortId: parsed.sid,
+                        publicKey: parsed.pbk
+                    }
+                }
+            }]
+        };
     } catch (err) {
-        return { web: site.title, url: site.url, success: false, latency: 0 };
-    } finally {
-        if (proc) proc.kill('SIGKILL');
-        fs.unlink(TEMP_CONFIG_PATH, () => {});
+        console.error(`❌ Error creating Xray config: ${err.message}`);
+        return null;
     }
 }
 
-// ====================== CHECK ALL SITES ======================
+// ====================== CHECK SITE WITH RETRY ======================
+
+async function checkSite(subscription, site, retries = 2) {
+    let proc = null;
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const parsed = parseVlessSubscription(subscription);
+            if (!parsed) {
+                return { web: site.title, url: site.url, success: false, latency: 0 };
+            }
+
+            const cfg = createXrayConfig(parsed);
+            if (!cfg) return { web: site.title, url: site.url, success: false, latency: 0 };
+
+            fs.writeFileSync(TEMP_CONFIG_PATH, JSON.stringify(cfg, null, 2));
+
+            proc = spawn(XRAY_PATH, ['run', '-c', TEMP_CONFIG_PATH], { 
+                stdio: ['ignore', 'ignore', 'pipe'] 
+            });
+
+            await new Promise(r => setTimeout(r, CHECK_DELAY_MS));
+
+            const start = Date.now();
+            const output = await new Promise((resolve, reject) => {
+                const timeoutId = setTimeout(() => reject(new Error('curl timeout')), CHECK_TIMEOUT_MS);
+                try {
+                    const { execSync } = require('child_process');
+                    const res = execSync(
+                        `curl -I -s --socks5 127.0.0.1:1080 --max-time ${(CHECK_TIMEOUT_MS / 1000) - 3} https://${site.url}`,
+                        { timeout: CHECK_TIMEOUT_MS }
+                    ).toString();
+                    clearTimeout(timeoutId);
+                    resolve(res);
+                } catch (e) {
+                    clearTimeout(timeoutId);
+                    reject(e);
+                }
+            });
+
+            const success = output.includes('HTTP/') || output.includes('200') || output.length > 20;
+            return { web: site.title, url: site.url, success, latency: Date.now() - start };
+
+        } catch (err) {
+            console.warn(`   ⚠️  Attempt ${attempt}/${retries} failed for ${site.url}`);
+            if (attempt === retries) {
+                return { web: site.title, url: site.url, success: false, latency: 0 };
+            }
+            await new Promise(r => setTimeout(r, CHECK_DELAY_MS / 2)); // small delay between retries
+        } finally {
+            if (proc) {
+                try { proc.kill('SIGKILL'); } catch (_) {}
+            }
+            fs.unlink(TEMP_CONFIG_PATH, () => {});
+        }
+    }
+}
+
+// ====================== CHECK ALL ======================
 
 async function checkAllSites(records, today, isStandalone = false) {
     const results = [];
@@ -211,7 +232,7 @@ async function verifyAccess(db, today, isStandalone = false) {
     await saveDatabase(finalDb);
     await fs.promises.unlink(TEMP_CONFIG_PATH).catch(() => {});
 
-    console.log(`\n✅ Проверка завершена.\n   Осталось записей: ${finalDb.length}\n   Удалено: ${recordsToRemove.size}`);
+    console.info(`\n✅ Проверка завершена.\n   Осталось записей: ${finalDb.length}\n   Удалено: ${recordsToRemove.size}`);
 }
 
 // ====================== STANDALONE ======================

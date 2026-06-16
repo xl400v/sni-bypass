@@ -1,8 +1,8 @@
 /**
  * Database and Utility functions
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.4
- * Date: 08 June 2026
+ * Version: 2.4.5
+ * Date: 16 June 2026
  */
 
 const fs = require('fs');
@@ -96,7 +96,7 @@ async function saveDatabase(records) {
     const writer = createObjectCsvWriter({ path: DB_FILE, header: CSV_HEADER });
     await writer.writeRecords(recordsForCsv);
 
-    console.log(`✅ Сохранено ${deduped.length} уникальных записей (после дедупликации)`);
+    console.info(`✅ Сохранено ${deduped.length} уникальных записей (после дедупликации)`);
 }
 
 module.exports = {

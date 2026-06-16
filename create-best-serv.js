@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.3
- * Date: 29 May 2026
+ * Version: 2.4.6
+ * Date: 16 June 2026
  */
 
 const fs = require('fs');
@@ -45,7 +45,7 @@ async function createBestServFile(db, outputFile, today) {
     // Создаём временный массив с priority (не сохраняется в базу!)
     let tempList = db.map(record => ({ ...record, priority: 3 }));
 
-    let ruFound = false;
+    let ruFound = false, content = header;
 
     for (const record of tempList) {
         const remarkLower = (record.subscription || '').toLowerCase();
@@ -67,34 +67,41 @@ async function createBestServFile(db, outputFile, today) {
         if (record.priority < 1) record.priority = 1;
     }
 
-    // Дедубликация по host:port
-    const seen = new Set();
+    // Сначала non-RU — до 6 лучших
+    const nonRu = tempList
+        .filter(r => r.country !== 'RU' && parseInt(r.telegram || 0) > 0)
+        .sort((a, b) => parseInt(a.telegram) - parseInt(b.telegram))
+        .slice(0, 6);
+
+    // Затем все RU (отсортированные по пингу)
+    const ruServers = tempList
+        .filter(r => r.country === 'RU' && parseInt(r.telegram || 0) > 0)
+        .sort((a, b) => parseInt(a.telegram) - parseInt(b.telegram));
+
     const finalList = [];
+    finalList.push(...nonRu, ...ruServers);
 
-    for (const record of tempList) {
+    // Дедупликация + фильтр
+    const seen = new Set();
+    const uniqueFinal = finalList.filter(record => {
         const hp = extractHostPort(record.subscription);
-        if (!hp || seen.has(hp)) continue;
+        if (!hp || seen.has(hp)) return false;
         seen.add(hp);
-        if (parseInt(record.telegram) + parseInt(record.youtube) > 0) finalList.push(record);
-    }
+        return true;
+    })
+    .forEach(r => content += processRemark(r.subscription, r) + '\n');
 
-    let content = header;
-    finalList
-        .sort((a, b) => a.priority - b.priority)
-        .forEach(r => content += processRemark(r.subscription, r) + '\n');
-    
-    const best = finalList.slice(0, 7);
     const timeForFooter = new Date().toISOString().slice(0, 16).replace('T', ' ');
     // Специальная последняя строка с fm-параметром
     const fmParam = 'fm=%7B%22tcp%22%3A%5B%7B%22type%22%3A%22grok%20-%20%F0%9F%93%9C%2C%20tg%20-%20%F0%9F%93%B0%2C%20youtube%20-%20%F0%9F%93%BA%22%7D%5D%7D&';
 
     content += `vless://1.1.1.1:443?${fmParam}type=tcp#`;
-    content += best.length > 0 ? `Checked%20%F0%9F%9B%A1%EF%B8%8F` : `No found%20%E2%9A%94%EF%B8%8F`;
+    content += nonRu.length > 0 ? `Checked%20%F0%9F%9B%A1%EF%B8%8F` : `No found%20%E2%9A%94%EF%B8%8F`;
     content += `%20${today}T${timeForFooter.split(' ')[1]}\n`;
 
     fs.writeFileSync(outputFile, content.trim());
-    if (best.length > 0 ) {
-        console.log(`\n🛡️  ${outputFile} успешно создано серверов: ${best.length}`);
+    if (nonRu.length > 0 ) {
+        console.log(`\n🛡️  ${outputFile} успешно создано серверов: ${nonRu.length}`);
     } else {
         console.log(`\n⚔️  Список серверов пустой. И база серверов пустая!`);
     }

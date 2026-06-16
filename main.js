@@ -1,7 +1,7 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.3
- * Date: 29 May 2026
+ * Version: 2.4.6
+ * Date: 16 June 2026
  */
 
 const fs = require('fs');
@@ -14,7 +14,8 @@ const {
     FTP_CONFIG,
     INITIAL_RATING,
     DEFAULT_SUBSCRIPTIONS_URL,
-    COUNTRY_FLAGS
+    COUNTRY_FLAGS,
+    CSV_HEADER
 } = config;
 
 function extractQuic(line) {
@@ -117,14 +118,14 @@ async function main() {
             tgToKeep = existing.telegram;
             ytToKeep = existing.youtube;
             if (existing.quic !== sub.quic) {
-                ratingToKeep = INITIAL_RATING / 3 * 2;
+                ratingToKeep = Math.floor(INITIAL_RATING / 3 * 2);
                 
         //       console.log("   🧲", sub.quic.padEnd(36), sub.hostPort);
             }
             updatedCount++;
         } else {
             const quics = newSubscriptions.filter(i => i.quic === sub.quic);
-            if (quics.length > 1) ratingToKeep = INITIAL_RATING / 3 * 2;
+            if (quics.length > 1) ratingToKeep = Math.floor(INITIAL_RATING / 3 * 2);
             
         //    console.log(`   ${quics.length} `, sub.quic.padEnd(36), sub.hostPort);
             newCount++;
@@ -135,9 +136,9 @@ async function main() {
             rating: ratingToKeep,
             protocol: sub.protocol,
             country: sub.country,
-            grok: gkToKeep,
-            telegram: tgToKeep,
-            youtube: ytToKeep,
+            grok: gkToKeep || 0,
+            telegram: tgToKeep || 0,
+            youtube: ytToKeep || 0,
             quic: sub.quic,
             subscription: sub.subscription
         };
@@ -157,7 +158,7 @@ async function main() {
         if (fullVerifyMode) fullVerifyMode === true;
         try {
             const { verifyAccess } = require('./verify-access.js');
-            console.log('🚀 Запуск проверки telegram.org | youtube.com...\n');
+            console.log(`🚀 Запуск проверки ${CSV_HEADER.find(item => item.id === 'tg').url}...\n`);
             await verifyAccess(db, today, fullVerifyMode);
         } catch (err) {
             console.error('❌ Ошибка при выполнении проверки:\n', err);

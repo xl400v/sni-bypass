@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.5
+ * Version: 2.4.6
  * Date: 16 June 2026
  * 
  * Запуск: npm run check   или   node verify-access.js
@@ -137,7 +137,7 @@ async function checkSite(subscription, site, retries = 2) {
             return { web: site.title, url: site.url, success, latency: Date.now() - start };
 
         } catch (err) {
-            console.warn(`   ⚠️  Attempt ${attempt}/${retries} failed for ${site.url}`);
+        //    console.warn(`   ⚠️  Attempt ${attempt}/${retries} failed for ${site.url}`);
             if (attempt === retries) {
                 return { web: site.title, url: site.url, success: false, latency: 0 };
             }
@@ -178,7 +178,8 @@ async function checkAllSites(records, today, isStandalone = false) {
                     console.log(`   ✅ ${item.url} → ${item.latency} ms`);
                     hasSuccess = true;
                 } else {
-                    record[item.web] = "0";
+                    const current = parseInt(record[item.web] || 0);
+                    record[item.web] = Math.floor(current * 1.2);
                     record.rating = String(parseInt(record.rating || INITIAL_RATING) - 10);
                     console.log(`   ❌ ${item.url} → fail`);
                 }

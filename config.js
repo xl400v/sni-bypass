@@ -1,6 +1,6 @@
 /**
  * Created by Grok (xAI) - Senior Frontend Developer Mentor
- * Version: 2.4.5
+ * Version: 2.4.6
  * Date: 16 June 2026
  */
 
@@ -11,7 +11,7 @@ module.exports = {
     DB_FILE: 'servers-db.csv',
     OUTPUT_FILE: 'best-serv.txt',
 
-    DEFAULT_SUBSCRIPTIONS_URL: 'https://github.com/hussaroff/lte-universal-checked/raw/refs/heads/main/checked.txt',
+    DEFAULT_SUBSCRIPTIONS_URL: 'https://github.com/zieng2/wl/raw/refs/heads/main/vless_lite.txt',
 
     CHECK_DELAY_MS: 1800,        // ← уменьшил с 2000
     CHECK_TIMEOUT_MS: 11000,      // ← новый глобальный таймаут для curl
